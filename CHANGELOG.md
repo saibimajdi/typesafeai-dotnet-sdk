@@ -24,6 +24,11 @@ it can happen by accident.
   the whole response with a `FormatException`. The count reads as `null` and the original value
   stays available in `RawJson`. `Usage.TotalTokens` likewise reads as `null` when the sum of the
   two counts does not fit an `int`, instead of wrapping around to a negative number.
+- A retry delay above about 49.7 days, the longest `Task.Delay` accepts, is now capped there. Before,
+  a large `MaxRetryAfter` or `BackoffMax` with no `TotalBudget` made `Task.Delay` throw
+  `ArgumentOutOfRangeException`, and `MaxRetryAfter = TimeSpan.MaxValue` let a saturated
+  `Retry-After` overflow the budget check with an `OverflowException` instead of stopping with the
+  `TypeSafeRateLimitException`.
 
 ### Changed
 

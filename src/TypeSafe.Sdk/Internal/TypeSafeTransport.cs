@@ -23,6 +23,9 @@ namespace TypeSafeAI;
 /// </remarks>
 internal sealed class TypeSafeTransport : IDisposable
 {
+    // The longest delay Task.Delay accepts: uint.MaxValue - 1 milliseconds, about 49.7 days.
+    private static readonly TimeSpan MaxDelay = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
     private readonly TypeSafeClientOptions _options;
@@ -101,9 +104,16 @@ internal sealed class TypeSafeTransport : IDisposable
                 throw failure;
             }
 
+            // Task.Delay rejects anything above about 49.7 days, and an unbounded MaxRetryAfter lets a
+            // server ask for up to TimeSpan.MaxValue. The budget check is written as a subtraction so
+            // that it cannot overflow either.
             var delay = ComputeDelay(failure, attempt, policy, out var serverRequested);
+            if (delay > MaxDelay)
+            {
+                delay = MaxDelay;
+            }
 
-            if (policy.TotalBudget is { } budget && elapsed + delay >= budget)
+            if (policy.TotalBudget is { } budget && delay >= budget - elapsed)
             {
                 // The Python SDK stops before a retry whose delay would reach the budget and
                 // re-raises the last error, which keeps worst-case latency bounded.
