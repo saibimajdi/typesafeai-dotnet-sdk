@@ -24,6 +24,10 @@ it can happen by accident.
   the whole response with a `FormatException`. The count reads as `null` and the original value
   stays available in `RawJson`. `Usage.TotalTokens` likewise reads as `null` when the sum of the
   two counts does not fit an `int`, instead of wrapping around to a negative number.
+- Serializing an `UnknownAnswer` no longer writes each of its fields twice. The fields came out
+  of both `Raw` and `AdditionalProperties`, producing duplicate keys that strict JSON parsers
+  reject and that multiplied on every cache round trip. `Raw` wins a name clash; an additional
+  property that `Raw` does not have is still written.
 
 ### Changed
 
