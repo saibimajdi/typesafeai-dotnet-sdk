@@ -93,6 +93,31 @@ public sealed class ClientBehaviorTests
     }
 
     [Fact]
+    public async Task ChangingTheHeadersDictionaryAfterConstructionDoesNotAffectTheClient()
+    {
+        var headers = new Dictionary<string, string> { ["X-Tenant"] = "tenant-a" };
+        var options = new TypeSafeClientOptions { ApiKey = TestClient.ApiKey, DefaultHeaders = headers };
+        var (client, handler) = TestClient.Returning(Fixtures.NoulResponse, options: options);
+
+        headers["X-Tenant"] = "tenant-b";
+
+        await client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], TestContext.Current.CancellationToken);
+
+        Assert.Equal("tenant-a", handler.LastRequest.Headers["X-Tenant"]);
+    }
+
+    [Fact]
+    public void CloningKeepsTheHeadersComparer()
+    {
+        var options = new TypeSafeClientOptions
+        {
+            DefaultHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["X-Tenant"] = "contoso" },
+        };
+
+        Assert.Equal("contoso", options.Clone().DefaultHeaders!["x-tenant"]);
+    }
+
+    [Fact]
     public async Task TheApiKeyFallsBackToTheEnvironmentVariable()
     {
         using var environment = new EnvironmentScope().Set(TypeSafeDefaults.ApiKeyEnvironmentVariable, "tsk_from_env");

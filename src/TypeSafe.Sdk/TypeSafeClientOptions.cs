@@ -103,6 +103,11 @@ public sealed class TypeSafeClientOptions
     /// Creates a copy of these options.
     /// </summary>
     /// <returns>A new instance with the same values.</returns>
+    /// <remarks>
+    /// <see cref="DefaultHeaders"/> is copied into a new dictionary, so changing the original
+    /// dictionary does not affect the copy. <see cref="Retry"/> is shared; a
+    /// <see cref="RetryPolicy"/> cannot be changed after construction.
+    /// </remarks>
     public TypeSafeClientOptions Clone() => new()
     {
         ApiKey = ApiKey,
@@ -110,7 +115,12 @@ public sealed class TypeSafeClientOptions
         Model = Model,
         Timeout = Timeout,
         Retry = Retry,
-        DefaultHeaders = DefaultHeaders,
+        DefaultHeaders = DefaultHeaders switch
+        {
+            null => null,
+            Dictionary<string, string> headers => new Dictionary<string, string>(headers, headers.Comparer),
+            var headers => new Dictionary<string, string>(headers, StringComparer.Ordinal),
+        },
         UserAgent = UserAgent,
         LoggerFactory = LoggerFactory,
         TimeProvider = TimeProvider,

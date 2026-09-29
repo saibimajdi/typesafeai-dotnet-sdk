@@ -136,6 +136,7 @@ public sealed class RetryPolicy
     /// Gets the HTTP status codes that are retried. Defaults to <c>408</c>, <c>429</c>, and
     /// <c>500</c> through <c>599</c>.
     /// </summary>
+    /// <remarks>The policy keeps a copy, so changing the list afterwards has no effect.</remarks>
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public IReadOnlyList<int> HttpStatuses
     {
@@ -143,7 +144,7 @@ public sealed class RetryPolicy
         init
         {
             ArgumentNullException.ThrowIfNull(value);
-            _httpStatuses = value;
+            _httpStatuses = Array.AsReadOnly([.. value]);
         }
     }
 

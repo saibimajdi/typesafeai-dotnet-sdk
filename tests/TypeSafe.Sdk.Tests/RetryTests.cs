@@ -564,6 +564,17 @@ public sealed class RetryTests
     }
 
     [Fact]
+    public void ChangingTheStatusListAfterConstructionDoesNotAffectThePolicy()
+    {
+        var statuses = new List<int> { 503 };
+        var policy = new RetryPolicy { HttpStatuses = statuses };
+
+        statuses.Add(400);
+
+        Assert.Equal([503], policy.HttpStatuses);
+    }
+
+    [Fact]
     public async Task RetriesReuseTheSameSerializedBody()
     {
         var bodies = new List<string?>();

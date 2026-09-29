@@ -36,7 +36,8 @@ it can happen by accident.
 - `new TypeSafeClient(apiKey, options)` no longer writes `apiKey` into the caller's `options`.
   Before, a later client built from the same options object authenticated with that key. The
   client now keeps a copy of the options it is given, so changing the object after construction
-  no longer affects a client that already exists.
+  no longer affects a client that already exists. That includes editing the `DefaultHeaders`
+  dictionary in place, and `RetryPolicy` now keeps its own copy of `HttpStatuses`.
 
 ### Changed
 
