@@ -33,6 +33,10 @@ it can happen by accident.
   of both `Raw` and `AdditionalProperties`, producing duplicate keys that strict JSON parsers
   reject and that multiplied on every cache round trip. `Raw` wins a name clash; an additional
   property that `Raw` does not have is still written.
+- `new TypeSafeClient(apiKey, options)` no longer writes `apiKey` into the caller's `options`.
+  Before, a later client built from the same options object authenticated with that key. The
+  client now keeps a copy of the options it is given, so changing the object after construction
+  no longer affects a client that already exists.
 
 ### Changed
 

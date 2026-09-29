@@ -40,7 +40,8 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
     /// </summary>
     /// <param name="options">
     /// The client options. When <see langword="null"/>, every setting comes from the environment
-    /// and from the SDK defaults.
+    /// and from the SDK defaults. The client keeps a copy, so changing the instance afterwards does
+    /// not affect this client.
     /// </param>
     /// <param name="httpClient">
     /// An optional <see cref="HttpClient"/> to use. When <see langword="null"/> the client creates
@@ -62,7 +63,8 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
     /// </param>
     /// <param name="options">
     /// The client options. When <see langword="null"/>, every remaining setting comes from the
-    /// environment and from the SDK defaults.
+    /// environment and from the SDK defaults. The client keeps a copy, so <paramref name="apiKey"/>
+    /// is never written into this instance and changing it afterwards does not affect this client.
     /// </param>
     /// <param name="httpClient">
     /// An optional <see cref="HttpClient"/> to use. When <see langword="null"/> the client creates
@@ -77,7 +79,9 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
 
     private TypeSafeClient(TypeSafeClientOptions? options, string? apiKey, HttpClient? httpClient)
     {
-        _options = options ?? new TypeSafeClientOptions();
+        // A copy, so the explicit key below cannot leak into an options object the caller shares,
+        // and later changes to that object do not reach this client.
+        _options = options?.Clone() ?? new TypeSafeClientOptions();
         TypeSafeClientOptions.ValidateTimeout(_options.Timeout);
 
         if (apiKey is not null)
