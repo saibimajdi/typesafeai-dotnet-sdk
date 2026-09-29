@@ -29,6 +29,10 @@ it can happen by accident.
   `ArgumentOutOfRangeException`, and `MaxRetryAfter = TimeSpan.MaxValue` let a saturated
   `Retry-After` overflow the budget check with an `OverflowException` instead of stopping with the
   `TypeSafeRateLimitException`.
+- Serializing an `UnknownAnswer` no longer writes each of its fields twice. The fields came out
+  of both `Raw` and `AdditionalProperties`, producing duplicate keys that strict JSON parsers
+  reject and that multiplied on every cache round trip. `Raw` wins a name clash; an additional
+  property that `Raw` does not have is still written.
 
 ### Changed
 

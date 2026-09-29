@@ -365,6 +365,42 @@ public sealed class ResponseParsingTests
     }
 
     [Fact]
+    public void UnknownAnswersRoundTripWithEachPropertyWrittenOnce()
+    {
+        const string Json = """{"id":"future","type":"ranking","ranking":["a","b"],"confidence":0.9}""";
+
+        var once = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeAnswer(Json));
+        var twice = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeAnswer(once));
+
+        // Strict parsers reject duplicate keys, and a cache that round-trips repeatedly must not
+        // pile up copies.
+        Assert.Equal(once, twice);
+        using var document = JsonDocument.Parse(twice);
+        Assert.Equal(
+            ["id", "type", "ranking", "confidence"],
+            document.RootElement.EnumerateObject().Select(p => p.Name));
+    }
+
+    [Fact]
+    public void UnknownAnswersAlsoWriteExtrasThatAreNotInRaw()
+    {
+        using var raw = JsonDocument.Parse("""{"type":"ranking","ranking":["a"]}""");
+        var answer = new UnknownAnswer(
+            "future",
+            "ranking",
+            raw.RootElement.Clone(),
+            new Dictionary<string, JsonNode?> { ["ranking"] = new JsonArray("x"), ["note"] = "kept" });
+
+        using var document = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(answer));
+
+        // Raw is the body exactly as it arrived, so it wins a name clash; an extra it lacks is kept.
+        Assert.Equal(
+            ["id", "type", "ranking", "note"],
+            document.RootElement.EnumerateObject().Select(p => p.Name));
+        Assert.Equal("a", document.RootElement.GetProperty("ranking")[0].GetString());
+    }
+
+    [Fact]
     public void QuestionsRoundTripThroughJson()
     {
         Question original = new ChoiceQuestion(
