@@ -102,6 +102,30 @@ public sealed class DependencyInjectionTests
         Assert.Equal("contoso", options.DefaultHeaders!["X-Tenant"]);
     }
 
+    [Theory]
+    [InlineData("false", false)]
+    [InlineData("False", false)]
+    [InlineData("true", true)]
+    [InlineData("not-a-bool", true)]
+    public void UseEnvironmentFallbackIsBound(string configured, bool expected)
+    {
+        var handler = new StubHttpMessageHandler(StubHttpMessageHandler.Json(Fixtures.NoulResponse));
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TypeSafe:ApiKey"] = "tsk_from_configuration",
+                ["TypeSafe:UseEnvironmentFallback"] = configured,
+            })
+            .Build();
+
+        using var provider = Build(handler, configure: null, configuration);
+        var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TypeSafeClientOptions>>().Value;
+
+        // An unparseable value is left untouched, like every other bound key.
+        Assert.Equal(expected, options.UseEnvironmentFallback);
+    }
+
     [Fact]
     public async Task BoundConfigurationReachesTheWire()
     {

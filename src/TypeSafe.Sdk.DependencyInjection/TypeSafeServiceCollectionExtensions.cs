@@ -126,6 +126,12 @@ public static class TypeSafeServiceCollectionExtensions
             options.Timeout = parsedTimeout;
         }
 
+        if (Read(section, nameof(TypeSafeClientOptions.UseEnvironmentFallback)) is { Length: > 0 } fallback &&
+            bool.TryParse(fallback, out var parsedFallback))
+        {
+            options.UseEnvironmentFallback = parsedFallback;
+        }
+
         if (section.GetSection(nameof(TypeSafeClientOptions.DefaultHeaders)).GetChildren().Any())
         {
             var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

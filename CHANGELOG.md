@@ -51,6 +51,11 @@ it can happen by accident.
 
 ### Added
 
+- `TypeSafeClientOptions.UseEnvironmentFallback`, `true` by default. Set it to `false` and the
+  client reads no `TYPESAFE_*` environment variable, so a stray variable on the host cannot change
+  the API key, the endpoint or the model: a missing `ApiKey` throws
+  `TypeSafeConfigurationException`, and an unset `BaseUrl` or `Model` uses the SDK default. It
+  binds from `TypeSafe:UseEnvironmentFallback` in configuration.
 - A searchable SDK documentation site with light/dark themes and automated GitHub Pages
   deployment, built from the existing Markdown guides and validated on pull requests.
 

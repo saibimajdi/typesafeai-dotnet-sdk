@@ -64,6 +64,7 @@ remains owned by the caller, keeps its caller-controlled settings, and is not di
 | `UserAgent` | `string?` | Appended to the SDK user-agent token when supplied. |
 | `LoggerFactory` | `ILoggerFactory?` | No SDK logging when omitted. |
 | `TimeProvider` | `TimeProvider?` | `TimeProvider.System`; injectable for testing. |
+| `UseEnvironmentFallback` | `bool` | `true`. When `false`, no `TYPESAFE_*` variable is read: `ApiKey` must be set, and `BaseUrl` and `Model` use the SDK defaults. |
 
 `BaseUrl` is the API root and must not include a version segment. The SDK appends
 `/v1/systemone` and `/v1/models` itself.

@@ -218,6 +218,83 @@ public sealed class ClientBehaviorTests
     }
 
     [Fact]
+    public void WithoutEnvironmentFallbackTheApiKeyVariableIsIgnored()
+    {
+        using var environment = new EnvironmentScope().Set(TypeSafeDefaults.ApiKeyEnvironmentVariable, "tsk_from_env");
+
+        var exception = Assert.Throws<TypeSafeConfigurationException>(
+            () => new TypeSafeClient(new TypeSafeClientOptions { UseEnvironmentFallback = false }));
+
+        Assert.Contains(nameof(TypeSafeClientOptions.UseEnvironmentFallback), exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(TypeSafeDefaults.BaseUrlEnvironmentVariable)]
+    [InlineData(TypeSafeDefaults.LegacyEndpointEnvironmentVariable)]
+    public async Task WithoutEnvironmentFallbackTheBaseUrlVariablesAreIgnored(string variable)
+    {
+        using var environment = new EnvironmentScope()
+            .Set(TypeSafeDefaults.BaseUrlEnvironmentVariable, null)
+            .Set(TypeSafeDefaults.LegacyEndpointEnvironmentVariable, null)
+            .Set(variable, "https://stray.example");
+
+        var options = new TypeSafeClientOptions { ApiKey = TestClient.ApiKey, UseEnvironmentFallback = false };
+        var (client, handler) = TestClient.Returning(Fixtures.NoulResponse, options: options);
+
+        await client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], TestContext.Current.CancellationToken);
+
+        Assert.Equal($"{TypeSafeDefaults.DefaultBaseUrl}/v1/systemone", handler.LastRequest.Uri.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task WithoutEnvironmentFallbackTheModelVariableIsIgnored()
+    {
+        using var environment = new EnvironmentScope().Set(TypeSafeDefaults.DefaultModelEnvironmentVariable, "jev-1.12");
+
+        var options = new TypeSafeClientOptions { ApiKey = TestClient.ApiKey, UseEnvironmentFallback = false };
+        var (client, handler) = TestClient.Returning(Fixtures.NoulResponse, options: options);
+
+        await client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], TestContext.Current.CancellationToken);
+
+        using var body = handler.LastRequest.ParseBody();
+        Assert.Equal(TypeSafeDefaults.DefaultModel, body.RootElement.GetProperty("model").GetString());
+    }
+
+    [Fact]
+    public async Task WithoutEnvironmentFallbackExplicitValuesStillApply()
+    {
+        using var environment = new EnvironmentScope()
+            .Set(TypeSafeDefaults.ApiKeyEnvironmentVariable, "tsk_from_env")
+            .Set(TypeSafeDefaults.BaseUrlEnvironmentVariable, "https://stray.example")
+            .Set(TypeSafeDefaults.DefaultModelEnvironmentVariable, "jev-stray");
+
+        var handler = new StubHttpMessageHandler(StubHttpMessageHandler.Json(Fixtures.NoulResponse));
+        using var client = new TypeSafeClient(
+            new TypeSafeClientOptions
+            {
+                ApiKey = "tsk_explicit",
+                BaseUrl = new Uri("https://configured.example"),
+                Model = "jev-1.12",
+                UseEnvironmentFallback = false,
+            },
+            new HttpClient(handler, disposeHandler: false));
+
+        await client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], TestContext.Current.CancellationToken);
+
+        Assert.Equal("Bearer tsk_explicit", handler.LastRequest.Headers["Authorization"]);
+        Assert.Equal("https://configured.example/v1/systemone", handler.LastRequest.Uri.AbsoluteUri);
+        using var body = handler.LastRequest.ParseBody();
+        Assert.Equal("jev-1.12", body.RootElement.GetProperty("model").GetString());
+    }
+
+    [Fact]
+    public void CloningKeepsUseEnvironmentFallback()
+    {
+        Assert.False(new TypeSafeClientOptions { UseEnvironmentFallback = false }.Clone().UseEnvironmentFallback);
+        Assert.True(new TypeSafeClientOptions().UseEnvironmentFallback);
+    }
+
+    [Fact]
     public async Task PerCallHeadersAreSentAndOverrideDefaults()
     {
         var options = new TypeSafeClientOptions

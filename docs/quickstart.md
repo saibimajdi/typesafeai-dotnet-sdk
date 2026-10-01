@@ -244,6 +244,10 @@ Add `TypeSafe` to configuration, from any provider, and the section is bound to
 }
 ```
 
+To configure the client from this section only, set `"UseEnvironmentFallback": false` in it. The
+client then reads no `TYPESAFE_*` environment variable, so `ApiKey` must be set and an unset
+`BaseUrl` or `Model` uses the SDK default.
+
 `AddTypeSafeClient` returns the `IHttpClientBuilder`, so a handler can be added to the pipeline. The
 client is registered as a singleton on top of `IHttpClientFactory`, and the factory's own HTTP
 logging has credential headers redacted, so turning on `Trace` logging does not write your API key

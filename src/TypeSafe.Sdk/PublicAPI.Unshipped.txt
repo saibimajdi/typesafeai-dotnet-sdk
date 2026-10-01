@@ -291,6 +291,8 @@ TypeSafeAI.TypeSafeClientOptions.Timeout.set -> void
 TypeSafeAI.TypeSafeClientOptions.TimeProvider.get -> System.TimeProvider?
 TypeSafeAI.TypeSafeClientOptions.TimeProvider.set -> void
 TypeSafeAI.TypeSafeClientOptions.TypeSafeClientOptions() -> void
+TypeSafeAI.TypeSafeClientOptions.UseEnvironmentFallback.get -> bool
+TypeSafeAI.TypeSafeClientOptions.UseEnvironmentFallback.set -> void
 TypeSafeAI.TypeSafeClientOptions.UserAgent.get -> string?
 TypeSafeAI.TypeSafeClientOptions.UserAgent.set -> void
 TypeSafeAI.TypeSafeClient.SystemOneAsync<TState>(TState state, System.Collections.Generic.IEnumerable<TypeSafeAI.Question!>! questions, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TState>! stateTypeInfo, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TypeSafeAI.SystemOneResult!>!
