@@ -349,6 +349,102 @@ public sealed class ResponseParsingTests
     }
 
     [Fact]
+    public void SerializingAResultKeepsUnmodelledTopLevelAndUsageFields()
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult("""
+            {
+              "model": "jev-latest",
+              "answers": { "is_urgent": { "type": "noul", "noul": 0.92 } },
+              "usage": { "input_tokens": 312, "output_tokens": 48, "cached_tokens": 7 },
+              "future_field": { "nested": [1, 2] }
+            }
+            """);
+
+        using var document = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(result));
+        var root = document.RootElement;
+
+        Assert.Equal("""{"nested":[1,2]}""", root.GetProperty("future_field").GetRawText());
+        Assert.Equal(7, root.GetProperty("usage").GetProperty("cached_tokens").GetInt32());
+        Assert.Equal(312, root.GetProperty("usage").GetProperty("input_tokens").GetInt32());
+        Assert.Equal(48, root.GetProperty("usage").GetProperty("output_tokens").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("input_tokens", "output_tokens")]
+    [InlineData("output_tokens", "input_tokens")]
+    public void SerializingAResultKeepsATokenCountThatDoesNotFitAnInt(string oversized, string normal)
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult($$"""
+            {
+              "model": "jev-latest",
+              "answers": {},
+              "usage": { "{{oversized}}": 1e20, "{{normal}}": 48 }
+            }
+            """);
+
+        var json = Serialization.TypeSafeJson.Serialize(result);
+        using var document = JsonDocument.Parse(json);
+        var usage = document.RootElement.GetProperty("usage");
+
+        // Read as unreported, but the value the server sent is not lost on the way to a cache.
+        Assert.Equal("1e20", usage.GetProperty(oversized).GetRawText());
+        Assert.Equal(48, usage.GetProperty(normal).GetInt32());
+        Assert.Equal(1, usage.EnumerateObject().Count(p => p.Name == normal));
+
+        var reread = Serialization.TypeSafeJson.DeserializeResult(json).Usage!;
+        Assert.Null(oversized == "input_tokens" ? reread.InputTokens : reread.OutputTokens);
+    }
+
+    [Fact]
+    public void SerializingAResultKeepsAUsageValueThatIsNotAnObject()
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult("""
+            { "model": "jev-latest", "answers": {}, "usage": "not reported" }
+            """);
+
+        Assert.Null(result.Usage);
+
+        using var document = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(result));
+
+        Assert.Equal("not reported", document.RootElement.GetProperty("usage").GetString());
+    }
+
+    [Fact]
+    public void SerializingAResultWritesEditsToAnAnswer()
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult("""
+            {
+              "model": "jev-latest",
+              "answers": { "is_urgent": { "type": "noul", "noul": 0.92, "extra": { "flag": false } } }
+            }
+            """);
+
+        result.Noul("is_urgent").AdditionalProperties["extra"]!["flag"] = true;
+
+        var restored = Serialization.TypeSafeJson.DeserializeResult(Serialization.TypeSafeJson.Serialize(result));
+
+        Assert.True(restored.Noul("is_urgent").AdditionalProperties["extra"]!["flag"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void SerializingAResultIsStableAcrossRoundTrips()
+    {
+        const string Json = """
+            {
+              "model": "jev-latest",
+              "answers": { "is_urgent": { "type": "noul", "noul": 0.92 } },
+              "usage": { "input_tokens": 312, "output_tokens": 48, "cached_tokens": 7 },
+              "future_field": 42
+            }
+            """;
+
+        var once = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeResult(Json));
+        var twice = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeResult(once));
+
+        Assert.Equal(once, twice);
+    }
+
+    [Fact]
     public async Task IndividualAnswersRoundTripThroughJson()
     {
         var (client, _) = TestClient.Returning(Fixtures.ScoreResponse);

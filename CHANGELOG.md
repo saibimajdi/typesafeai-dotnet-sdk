@@ -38,6 +38,12 @@ it can happen by accident.
   client now keeps a copy of the options it is given, so changing the object after construction
   no longer affects a client that already exists. That includes editing the `DefaultHeaders`
   dictionary in place, and `RetryPolicy` now keeps its own copy of `HttpStatuses`.
+- Serializing a `SystemOneResult` no longer drops the response fields the SDK does not model, so a
+  cached result is complete when it is read back, as the forward-compatibility guide promises.
+  Unknown top-level fields, unknown `usage` fields, a `usage` value that is not an object, and a
+  token count that read as `null` because it did not fit an `int` are all copied from `RawJson`.
+  The model, answers and the other token counts are still written from the typed properties, so
+  edits to an answer's `AdditionalProperties` are kept.
 
 ### Changed
 
