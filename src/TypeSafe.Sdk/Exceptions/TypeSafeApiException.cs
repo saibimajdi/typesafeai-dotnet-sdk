@@ -9,7 +9,9 @@ namespace TypeSafeAI;
 /// <para>
 /// The concrete type is chosen from the HTTP status code alone. The status code is stable and
 /// documented; the body's <c>detail.error_type</c> string is not, so it is surfaced through
-/// <see cref="ErrorType"/> but never used to select an exception type.
+/// <see cref="ErrorType"/> but never used to select an exception type. The one exception is a
+/// body over the SDK's 16 MiB limit, which raises <see cref="TypeSafeResponseValidationException"/>
+/// whatever the status.
 /// </para>
 /// <para>
 /// Every property is a snapshot taken when the response was read, so the exception stays valid

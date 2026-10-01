@@ -1,14 +1,22 @@
 namespace TypeSafeAI;
 
 /// <summary>
-/// The API returned a successful HTTP response whose body was missing or structurally invalid.
+/// The API returned a successful HTTP response whose body was missing or structurally invalid, or
+/// a response of any status whose body exceeded the SDK's 16 MiB limit.
 /// </summary>
 /// <remarks>
+/// <para>
 /// A response that merely carries fields this SDK version does not model is <em>not</em> an
 /// error: unmodelled fields are preserved, and an unrecognised answer kind deserializes to
 /// <see cref="UnknownAnswer"/>. This exception means the response did not satisfy the documented
 /// contract at all, which usually indicates a proxy, a captive portal, or an incompatible API
 /// version rather than a transient fault.
+/// </para>
+/// <para>
+/// The size limit is checked before the status code is classified, so an oversized error body
+/// raises this exception rather than the status-specific one; <see cref="TypeSafeApiException.StatusCode"/>
+/// still carries the status. The built-in retry rules do not retry it.
+/// </para>
 /// </remarks>
 public sealed class TypeSafeResponseValidationException : TypeSafeApiException
 {

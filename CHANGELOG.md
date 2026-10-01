@@ -44,6 +44,11 @@ it can happen by accident.
   token count that read as `null` because it did not fit an `int` are all copied from `RawJson`.
   The model, answers and the other token counts are still written from the typed properties, so
   edits to an answer's `AdditionalProperties` are kept.
+- A response body is now limited to 16 MiB. Before, an endless or huge body, from a broken proxy or
+  a wrong `BaseUrl`, was buffered until it hit .NET's 2 GB limit, and the resulting connection
+  error was retried, so one call could allocate several gigabytes. An oversized body now fails
+  with a `TypeSafeResponseValidationException`, which is not retried; a `Content-Length` over the
+  limit fails before the body is read.
 
 ### Changed
 
