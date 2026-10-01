@@ -137,3 +137,71 @@ internal sealed class StubHttpMessageHandler : HttpMessageHandler
         return response;
     }
 }
+
+/// <summary>
+/// A non-seekable response body of a given length that starts with a prefix and is padded with
+/// spaces, so it carries no Content-Length unless the test sets one.
+/// </summary>
+/// <param name="prefix">The bytes the body starts with.</param>
+/// <param name="length">The total length, or <see cref="long.MaxValue"/> for an endless body.</param>
+/// <param name="atEnd">
+/// Runs when the body is exhausted instead of returning end of stream, so a test can fail or stall
+/// the read midway.
+/// </param>
+internal sealed class FakeBodyStream(byte[] prefix, long length, Func<CancellationToken, Task>? atEnd = null) : Stream
+{
+    public long BytesRead { get; private set; }
+
+    public override bool CanRead => true;
+
+    public override bool CanSeek => false;
+
+    public override bool CanWrite => false;
+
+    public override long Length => throw new NotSupportedException();
+
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        if (BytesRead >= length)
+        {
+            if (atEnd is not null)
+            {
+                await atEnd(cancellationToken).ConfigureAwait(false);
+            }
+
+            return 0;
+        }
+
+        var count = (int)Math.Min(buffer.Length, length - BytesRead);
+        for (var i = 0; i < count; i++)
+        {
+            var position = BytesRead + i;
+            buffer.Span[i] = position < prefix.Length ? prefix[position] : (byte)' ';
+        }
+
+        BytesRead += count;
+        return count;
+    }
+
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+    public override int Read(byte[] buffer, int offset, int count) =>
+        ReadAsync(buffer, offset, count, CancellationToken.None).GetAwaiter().GetResult();
+
+    public override void Flush()
+    {
+    }
+
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+    public override void SetLength(long value) => throw new NotSupportedException();
+
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+}

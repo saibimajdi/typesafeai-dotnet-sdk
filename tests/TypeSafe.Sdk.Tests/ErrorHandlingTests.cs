@@ -269,4 +269,134 @@ public sealed class ErrorHandlingTests
 
         await Task.CompletedTask;
     }
+
+    // Mirrors the SDK's internal cap on a response body.
+    private const int MaxResponseBytes = 16 * 1024 * 1024;
+
+    private static HttpResponseMessage Streaming(
+        FakeBodyStream body,
+        long? contentLength = null,
+        HttpStatusCode statusCode = HttpStatusCode.OK)
+    {
+        var response = new HttpResponseMessage(statusCode) { Content = new StreamContent(body) };
+        response.Content.Headers.ContentLength = contentLength;
+        return response;
+    }
+
+    private static FakeBodyStream NoulBody(long length, Func<CancellationToken, Task>? atEnd = null) =>
+        new(System.Text.Encoding.UTF8.GetBytes(Fixtures.NoulResponse), length, atEnd);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ABodyAtTheSizeLimitIsAccepted(bool withContentLength)
+    {
+        var (client, _) = TestClient.Create(
+            (_, _) => Streaming(NoulBody(MaxResponseBytes), withContentLength ? MaxResponseBytes : null),
+            NoRetry());
+
+        var result = await client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], TestContext.Current.CancellationToken);
+
+        Assert.Equal(0.92, result.Noul("is_urgent").Probability);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ABodyOneByteOverTheSizeLimitIsRejectedAndNotRetried(bool withContentLength)
+    {
+        var (client, handler) = TestClient.Create(
+            (_, _) => Streaming(NoulBody(MaxResponseBytes + 1L), withContentLength ? MaxResponseBytes + 1L : null));
+
+        var exception = await Assert.ThrowsAsync<TypeSafeResponseValidationException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], TestContext.Current.CancellationToken));
+
+        Assert.Equal(HttpStatusCode.OK, exception.StatusCode);
+        Assert.Equal(1, handler.Attempts);
+    }
+
+    [Fact]
+    public async Task AnOversizedContentLengthIsRejectedBeforeTheBodyIsRead()
+    {
+        var body = NoulBody(long.MaxValue);
+        var (client, _) = TestClient.Create((_, _) => Streaming(body, MaxResponseBytes + 1L), NoRetry());
+
+        await Assert.ThrowsAsync<TypeSafeResponseValidationException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, body.BytesRead);
+    }
+
+    [Fact]
+    public async Task AnEndlessBodyStopsAtTheSizeLimit()
+    {
+        var body = NoulBody(long.MaxValue);
+        var (client, handler) = TestClient.Create((_, _) => Streaming(body));
+
+        await Assert.ThrowsAsync<TypeSafeResponseValidationException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], TestContext.Current.CancellationToken));
+
+        // The body is read in chunks, so it is consumed at most a chunk past the limit.
+        Assert.InRange(body.BytesRead, MaxResponseBytes, MaxResponseBytes + (1024 * 1024));
+        Assert.Equal(1, handler.Attempts);
+    }
+
+    [Fact]
+    public async Task AnOversizedErrorBodyIsRejectedBeforeItsStatusIsClassified()
+    {
+        var (client, handler) = TestClient.Create(
+            (_, _) => Streaming(NoulBody(long.MaxValue), statusCode: HttpStatusCode.ServiceUnavailable));
+
+        var exception = await Assert.ThrowsAsync<TypeSafeResponseValidationException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], TestContext.Current.CancellationToken));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, exception.StatusCode);
+        Assert.Equal(1, handler.Attempts);
+    }
+
+    [Fact]
+    public async Task AConnectionDroppedMidBodyIsARetryableConnectionError()
+    {
+        var options = new TypeSafeClientOptions
+        {
+            Retry = new RetryPolicy { MaxRetries = 2, BackoffInitial = TimeSpan.Zero, BackoffMax = TimeSpan.Zero },
+        };
+        var (client, handler) = TestClient.Create(
+            (_, _) => Streaming(NoulBody(1000, _ => throw new IOException("connection reset")), contentLength: 5000),
+            options);
+
+        await Assert.ThrowsAsync<TypeSafeConnectionException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], TestContext.Current.CancellationToken));
+
+        Assert.Equal(3, handler.Attempts);
+    }
+
+    [Fact]
+    public async Task ABodyThatStallsHitsTheAttemptTimeout()
+    {
+        var options = new TypeSafeClientOptions { Retry = RetryPolicy.None, Timeout = TimeSpan.FromMilliseconds(200) };
+        var (client, _) = TestClient.Create(
+            (_, _) => Streaming(NoulBody(1000, ct => Task.Delay(Timeout.InfiniteTimeSpan, ct))),
+            options);
+
+        await Assert.ThrowsAsync<TypeSafeTimeoutException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task CancellingDuringAStalledBodyCancelsTheCall()
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var options = new TypeSafeClientOptions { Retry = RetryPolicy.None, Timeout = Timeout.InfiniteTimeSpan };
+        var (client, _) = TestClient.Create(
+            (_, _) => Streaming(NoulBody(1000, ct =>
+            {
+                cancellation.Cancel();
+                return Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            })),
+            options);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("is_urgent", "q?")], cancellation.Token));
+    }
 }
