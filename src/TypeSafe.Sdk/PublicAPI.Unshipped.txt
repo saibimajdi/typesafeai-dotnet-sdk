@@ -68,6 +68,7 @@ static TypeSafeAI.Serialization.TypeSafeJson.DeserializeResult(string! json) -> 
 static TypeSafeAI.Serialization.TypeSafeJson.Options.get -> System.Text.Json.JsonSerializerOptions!
 static TypeSafeAI.Serialization.TypeSafeJson.Serialize(TypeSafeAI.Answer! answer) -> string!
 static TypeSafeAI.Serialization.TypeSafeJson.Serialize(TypeSafeAI.Question! question) -> string!
+static TypeSafeAI.Serialization.TypeSafeJson.Serialize(TypeSafeAI.SystemOneRequest! request) -> string!
 static TypeSafeAI.Serialization.TypeSafeJson.Serialize(TypeSafeAI.SystemOneResult! result) -> string!
 static TypeSafeAI.Usage.operator ==(TypeSafeAI.Usage? left, TypeSafeAI.Usage? right) -> bool
 static TypeSafeAI.Usage.operator !=(TypeSafeAI.Usage? left, TypeSafeAI.Usage? right) -> bool

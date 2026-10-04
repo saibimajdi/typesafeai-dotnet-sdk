@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using TypeSafeAI.Internal;
 
 namespace TypeSafeAI.Serialization;
 
@@ -73,6 +74,56 @@ public static class TypeSafeJson
     {
         ArgumentNullException.ThrowIfNull(question);
         return Serialize(writer => QuestionWriter.Write(writer, question, includeId: true));
+    }
+
+    /// <summary>
+    /// Serializes a request to the JSON body the client would send for it.
+    /// </summary>
+    /// <param name="request">The request to serialize.</param>
+    /// <returns>The request body.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// The body is one the client would reject: the state is <see langword="null"/>, there are no
+    /// questions, two questions share an id, or the additional properties carry the removed
+    /// <c>document</c> field. Per-call options that are not part of the body, such as the timeout,
+    /// are not validated here.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// The body comes from the same writer that
+    /// <see cref="TypeSafeClient.SystemOneAsync(SystemOneRequest, CancellationToken)"/> uses, so it
+    /// is byte for byte what goes on the wire. Use it to measure a request before sending it, with
+    /// <see cref="Encoding.UTF8"/>'s <see cref="Encoding.GetByteCount(string)"/>. The writer escapes
+    /// each non-ASCII character to a six-character sequence, so counting the characters of the state,
+    /// or serializing it with <see cref="System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/>,
+    /// undercounts what the SDK sends.
+    /// </para>
+    /// <para>
+    /// <see cref="SystemOneRequest.Questions"/> is enumerated once here and once more when the request
+    /// is sent, as it would be for two sends. A sequence that can only be enumerated once has nothing
+    /// left for the send.
+    /// </para>
+    /// <para>
+    /// There is no client here to supply a default model. When neither
+    /// <see cref="SystemOneRequest.Model"/> nor the <see cref="TypeSafeRequestOptions.Model"/> of its
+    /// <see cref="SystemOneRequest.Options"/> is set, the model written is
+    /// <see cref="TypeSafeDefaults.DefaultModel"/> rather than the one a particular client is
+    /// configured with (an additional property named <c>model</c> still replaces it, as when sending).
+    /// The size then differs by the difference between the two model names' lengths; set the model on
+    /// the request when the exact bytes matter.
+    /// </para>
+    /// </remarks>
+    public static string Serialize(SystemOneRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        // Same precedence as the client: the request's own values win over its per-call options,
+        // and additional properties replace the options' set rather than merging with it.
+        var model = request.Model ?? request.Options?.Model ?? TypeSafeDefaults.DefaultModel;
+        var additional = request.AdditionalProperties ?? request.Options?.AdditionalBodyProperties;
+
+        return Encoding.UTF8.GetString(
+            TypeSafeRequestWriter.Write(request.State, model, request.Questions, additional));
     }
 
     /// <summary>

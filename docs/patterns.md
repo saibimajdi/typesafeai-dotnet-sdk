@@ -35,7 +35,12 @@ else if (result.Contains("department"))
 
 The alternative — one request per question — is dramatically more expensive and slower for the same
 answers. The only reason to split is the token budget: state and questions share roughly 32,000
-tokens per request, so split by state, not by question.
+tokens per request, so split by state, not by question. Tokens are counted by the server, but the
+request's size on the wire is a usable proxy: `TypeSafeJson.Serialize(request)` returns the body
+the client would send (with `TypeSafeDefaults.DefaultModel` when the request names no model, since
+there is no client to supply one), and `Encoding.UTF8.GetByteCount` of it is the size in bytes. Measuring
+the state text itself undercounts, because the SDK escapes each non-ASCII character to a
+six-character sequence.
 
 Because the API does not promise an answer for every id, use `TryGet` for anything speculative.
 `Ids` tells you which questions were answered.

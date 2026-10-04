@@ -62,6 +62,12 @@ it can happen by accident.
   the API key, the endpoint or the model: a missing `ApiKey` throws
   `TypeSafeConfigurationException`, and an unset `BaseUrl` or `Model` uses the SDK default. It
   binds from `TypeSafe:UseEnvironmentFallback` in configuration.
+- `TypeSafeJson.Serialize(SystemOneRequest)` returns the body the client would send for a request,
+  from the same writer, so a caller can measure a request before sending it. Measure it with
+  `Encoding.UTF8.GetByteCount`: the writer escapes each non-ASCII character to a six-character
+  sequence, so counting the characters of the state undercounts what goes on the wire. Without a
+  client there is no configured default model: a request that names no model is written with
+  `TypeSafeDefaults.DefaultModel`.
 - A searchable SDK documentation site with light/dark themes and automated GitHub Pages
   deployment, built from the existing Markdown guides and validated on pull requests.
 
