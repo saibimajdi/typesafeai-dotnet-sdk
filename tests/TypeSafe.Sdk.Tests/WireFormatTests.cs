@@ -364,6 +364,31 @@ public sealed class WireFormatTests
 
         // Exact, not JSON-equivalent: a size measurement is only useful if the bytes are the same.
         Assert.Equal(handler.LastRequest.Body, measured);
+
+        // Parity alone would also hold if both paths shared the same bug, so the measured body is
+        // checked against the documented shape as well.
+        AssertJsonEquivalent(
+            """
+            {
+              "state": "Mijn uitbetalingen mislukken al drie dagen — één na één.",
+              "model": "jev-2026-01",
+              "questions": {
+                "is_urgent": { "type": "noul", "instructions": "Does this convey urgency?" },
+                "department": {
+                  "type": "choice",
+                  "instructions": "Which team should handle this?",
+                  "criteria": { "billing": null, "technical": null, "sales": null }
+                },
+                "frustration": {
+                  "type": "score",
+                  "instructions": "How frustrated is the customer?",
+                  "criteria": ["Calm", "Frustrated", "Very angry"]
+                }
+              },
+              "future_field": true
+            }
+            """,
+            measured);
     }
 
     [Fact]
