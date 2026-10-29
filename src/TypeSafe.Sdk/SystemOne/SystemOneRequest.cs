@@ -46,6 +46,37 @@ public sealed class SystemOneRequest
     public required IEnumerable<Question> Questions { get; init; }
 
     /// <summary>
+    /// Gets the images to send with this request, keyed by the reference string that stands for
+    /// each one, or <see langword="null"/> to send none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Write a reference wherever its image belongs, as a whole string value or inside a longer
+    /// string in the state, a question's instructions, or its criteria, and the model receives the
+    /// image in its place. Every asset must be referenced at least once or the API returns
+    /// <c>400</c>, and object keys are never replaced. A new <see cref="Guid"/> per image is the
+    /// safest reference.
+    /// </para>
+    /// <para>
+    /// Images are an experimental API feature. The SDK sends the
+    /// <see cref="TypeSafeDefaults.ImagesHeader"/> header automatically when this map is non-empty.
+    /// </para>
+    /// <code>
+    /// var door = Guid.NewGuid().ToString();
+    /// var request = new SystemOneRequest
+    /// {
+    ///     State = new JsonObject { ["door"] = door },
+    ///     Assets = new Dictionary&lt;string, ImageAsset&gt;
+    ///     {
+    ///         [door] = await ImageAsset.FromFileAsync("door-camera.jpg"),
+    ///     },
+    ///     Questions = [new NoulQuestion("person_present", "Is there a person in `door`?")],
+    /// };
+    /// </code>
+    /// </remarks>
+    public IReadOnlyDictionary<string, ImageAsset>? Assets { get; init; }
+
+    /// <summary>
     /// Gets the model to use for this request, or <see langword="null"/> to use the client default.
     /// </summary>
     public string? Model { get; init; }

@@ -127,7 +127,7 @@ internal static class Fixtures
     /// </summary>
     public const string ThreeScoreResponse = """
         {
-          "model": "jev-1.13.0",
+          "model": "jev-1.14.0",
           "answers": {
             "severity": {
               "type": "score",

@@ -49,22 +49,14 @@ internal static class QuestionWriter
             WriteInstructions(writer, score.Instructions);
             WriteScoreCriteria(writer, score);
         }
+        else if (question is BoxQuestion box)
+        {
+            WriteInstructions(writer, box.Instructions);
+        }
         else if (question is RawQuestion raw)
         {
             WriteInstructions(writer, raw.Instructions);
-
-            foreach (var (name, value) in raw.Body)
-            {
-                if (value is null)
-                {
-                    writer.WriteNull(name);
-                }
-                else
-                {
-                    writer.WritePropertyName(name);
-                    value.WriteTo(writer);
-                }
-            }
+            WriteRawBody(writer, raw.Body);
         }
 
         foreach (var (name, value) in question.AdditionalProperties)
@@ -83,6 +75,22 @@ internal static class QuestionWriter
         }
 
         writer.WriteEndObject();
+    }
+
+    private static void WriteRawBody(Utf8JsonWriter writer, JsonObject body)
+    {
+        foreach (var (name, value) in body)
+        {
+            if (value is null)
+            {
+                writer.WriteNull(name);
+            }
+            else
+            {
+                writer.WritePropertyName(name);
+                value.WriteTo(writer);
+            }
+        }
     }
 
     private static void WriteInstructions(Utf8JsonWriter writer, JsonNode? instructions)

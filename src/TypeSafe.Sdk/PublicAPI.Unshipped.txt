@@ -7,17 +7,25 @@ abstract TypeSafeAI.Answer.TryGetConfidence(out double confidence) -> bool
 abstract TypeSafeAI.Answer.Type.get -> string!
 abstract TypeSafeAI.Question.Type.get -> string!
 const TypeSafeAI.TypeSafeDefaults.ApiKeyEnvironmentVariable = "TYPESAFE_API_KEY" -> string!
-const TypeSafeAI.TypeSafeDefaults.ApproximateRequestTokenBudget = 32000 -> int
+const TypeSafeAI.TypeSafeDefaults.ApproximateLongContextTokenBudget = 262000 -> int
+const TypeSafeAI.TypeSafeDefaults.ApproximateQuestionTokenBudget = 32000 -> int
+const TypeSafeAI.TypeSafeDefaults.ApproximateRequestTokenBudget = 64000 -> int
 const TypeSafeAI.TypeSafeDefaults.BaseUrlEnvironmentVariable = "TYPESAFE_BASE_URL" -> string!
 const TypeSafeAI.TypeSafeDefaults.DefaultBaseUrl = "https://api.typesafe.ai" -> string!
 const TypeSafeAI.TypeSafeDefaults.DefaultModel = "jev-latest" -> string!
 const TypeSafeAI.TypeSafeDefaults.DefaultModelEnvironmentVariable = "TYPESAFE_DEFAULT_MODEL" -> string!
+const TypeSafeAI.TypeSafeDefaults.ImagesHeader = "TypeSafe-Danger-Zone-Images" -> string!
 const TypeSafeAI.TypeSafeDefaults.LegacyEndpointEnvironmentVariable = "TYPESAFE_ENDPOINT" -> string!
 const TypeSafeAI.TypeSafeDefaults.LogLevelEnvironmentVariable = "TYPESAFE_LOG_LEVEL" -> string!
+const TypeSafeAI.TypeSafeDefaults.LongContextHeader = "TypeSafe-Danger-Zone-Long-Context" -> string!
 const TypeSafeAI.TypeSafeDefaults.MaximumChoiceOptions = 255 -> int
 const TypeSafeAI.TypeSafeDefaults.MaximumScoreLevels = 10 -> int
 const TypeSafeAI.TypeSafeDefaults.MinimumScoreLevels = 2 -> int
 override TypeSafeAI.Answer.ToString() -> string!
+override TypeSafeAI.BoxAnswer.ToString() -> string!
+override TypeSafeAI.BoxAnswer.TryGetConfidence(out double confidence) -> bool
+override TypeSafeAI.BoxAnswer.Type.get -> string!
+override TypeSafeAI.BoxQuestion.Type.get -> string!
 override TypeSafeAI.ChoiceAnswer.ToString() -> string!
 override TypeSafeAI.ChoiceAnswer.TryGetConfidence(out double confidence) -> bool
 override TypeSafeAI.ChoiceAnswer.Type.get -> string!
@@ -53,6 +61,10 @@ static readonly TypeSafeAI.TypeSafeDefaults.DefaultTimeout -> System.TimeSpan
 static TypeSafeAI.CompositeScore.Profiles(System.Collections.Generic.IEnumerable<TypeSafeAI.WeightedScore>! parts, System.Collections.Generic.IReadOnlyDictionary<string!, System.Collections.Generic.IReadOnlyDictionary<string!, double>!>! profiles) -> System.Collections.Generic.IReadOnlyDictionary<string!, double>!
 static TypeSafeAI.CompositeScore.Weighted(params TypeSafeAI.WeightedScore[]! parts) -> double
 static TypeSafeAI.CompositeScore.Weighted(System.Collections.Generic.IEnumerable<TypeSafeAI.WeightedScore>! parts) -> double
+static TypeSafeAI.ImageAsset.FromBase64(string! dataBase64, TypeSafeAI.ImageFormat format) -> TypeSafeAI.ImageAsset!
+static TypeSafeAI.ImageAsset.FromBytes(System.ReadOnlySpan<byte> data) -> TypeSafeAI.ImageAsset!
+static TypeSafeAI.ImageAsset.FromBytes(System.ReadOnlySpan<byte> data, TypeSafeAI.ImageFormat format) -> TypeSafeAI.ImageAsset!
+static TypeSafeAI.ImageAsset.FromFileAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TypeSafeAI.ImageAsset!>!
 static TypeSafeAI.ModelMetadata.operator ==(TypeSafeAI.ModelMetadata? left, TypeSafeAI.ModelMetadata? right) -> bool
 static TypeSafeAI.ModelMetadata.operator !=(TypeSafeAI.ModelMetadata? left, TypeSafeAI.ModelMetadata? right) -> bool
 static TypeSafeAI.ProbabilityMath.ExpectedLevel(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<int, double>>! probabilities) -> double
@@ -78,6 +90,17 @@ TypeSafeAI.Answer
 TypeSafeAI.Answer.AdditionalProperties.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 TypeSafeAI.Answer.Answer(string! id, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>? additionalProperties = null) -> void
 TypeSafeAI.Answer.Id.get -> string!
+TypeSafeAI.BoxAnswer
+TypeSafeAI.BoxAnswer.Bottom.get -> double
+TypeSafeAI.BoxAnswer.BoxAnswer(string! id, double top, double bottom, double left, double right, double? confidence, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>? additionalProperties = null) -> void
+TypeSafeAI.BoxAnswer.Confidence.get -> double?
+TypeSafeAI.BoxAnswer.Height.get -> double
+TypeSafeAI.BoxAnswer.Left.get -> double
+TypeSafeAI.BoxAnswer.Right.get -> double
+TypeSafeAI.BoxAnswer.Top.get -> double
+TypeSafeAI.BoxAnswer.Width.get -> double
+TypeSafeAI.BoxQuestion
+TypeSafeAI.BoxQuestion.BoxQuestion(string! id, System.Text.Json.Nodes.JsonNode? instructions = null, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>? additionalProperties = null) -> void
 TypeSafeAI.ChoiceAnswer
 TypeSafeAI.ChoiceAnswer.ChoiceAnswer(string! id, string! label, System.Collections.Generic.IReadOnlyDictionary<string!, double>! probabilities, double confidence, System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>? additionalProperties = null) -> void
 TypeSafeAI.ChoiceAnswer.Confidence.get -> double
@@ -98,6 +121,12 @@ TypeSafeAI.ChoiceQuestion.ChoiceQuestion(string! id, System.Text.Json.Nodes.Json
 TypeSafeAI.ChoiceQuestion.Criteria.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 TypeSafeAI.ChoiceQuestion.Labels.get -> System.Collections.Generic.IReadOnlyList<string!>!
 TypeSafeAI.CompositeScore
+TypeSafeAI.ImageAsset
+TypeSafeAI.ImageAsset.DataBase64.get -> string!
+TypeSafeAI.ImageAsset.Format.get -> TypeSafeAI.ImageFormat
+TypeSafeAI.ImageFormat
+TypeSafeAI.ImageFormat.Jpeg = 1 -> TypeSafeAI.ImageFormat
+TypeSafeAI.ImageFormat.Png = 0 -> TypeSafeAI.ImageFormat
 TypeSafeAI.IModelsResource
 TypeSafeAI.IModelsResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TypeSafeAI.ModelsResult!>!
 TypeSafeAI.IQuestion<TAnswer>
@@ -220,6 +249,8 @@ TypeSafeAI.Serialization.TypeSafeJson
 TypeSafeAI.SystemOneRequest
 TypeSafeAI.SystemOneRequest.AdditionalProperties.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>?
 TypeSafeAI.SystemOneRequest.AdditionalProperties.init -> void
+TypeSafeAI.SystemOneRequest.Assets.get -> System.Collections.Generic.IReadOnlyDictionary<string!, TypeSafeAI.ImageAsset!>?
+TypeSafeAI.SystemOneRequest.Assets.init -> void
 TypeSafeAI.SystemOneRequest.Model.get -> string?
 TypeSafeAI.SystemOneRequest.Model.init -> void
 TypeSafeAI.SystemOneRequest.Options.get -> TypeSafeAI.TypeSafeRequestOptions?
@@ -231,6 +262,8 @@ TypeSafeAI.SystemOneRequest.State.init -> void
 TypeSafeAI.SystemOneRequest.SystemOneRequest() -> void
 TypeSafeAI.SystemOneResult
 TypeSafeAI.SystemOneResult.Answers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, TypeSafeAI.Answer!>!
+TypeSafeAI.SystemOneResult.Boxes.get -> System.Collections.Generic.IReadOnlyDictionary<string!, TypeSafeAI.BoxAnswer!>!
+TypeSafeAI.SystemOneResult.Box(string! id) -> TypeSafeAI.BoxAnswer!
 TypeSafeAI.SystemOneResult.Choices.get -> System.Collections.Generic.IReadOnlyDictionary<string!, TypeSafeAI.ChoiceAnswer!>!
 TypeSafeAI.SystemOneResult.Choice(string! id) -> TypeSafeAI.ChoiceAnswer!
 TypeSafeAI.SystemOneResult.Contains(string! id) -> bool
@@ -340,6 +373,8 @@ TypeSafeAI.TypeSafeRequestOptions.AdditionalBodyProperties.get -> System.Collect
 TypeSafeAI.TypeSafeRequestOptions.AdditionalBodyProperties.init -> void
 TypeSafeAI.TypeSafeRequestOptions.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
 TypeSafeAI.TypeSafeRequestOptions.Headers.init -> void
+TypeSafeAI.TypeSafeRequestOptions.LongContext.get -> bool?
+TypeSafeAI.TypeSafeRequestOptions.LongContext.init -> void
 TypeSafeAI.TypeSafeRequestOptions.Model.get -> string?
 TypeSafeAI.TypeSafeRequestOptions.Model.init -> void
 TypeSafeAI.TypeSafeRequestOptions.Retry.get -> TypeSafeAI.RetryPolicy?

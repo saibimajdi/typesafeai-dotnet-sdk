@@ -65,7 +65,8 @@ public abstract class Answer
     /// and <c>1</c>; otherwise <c>0</c>.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> for <see cref="ChoiceAnswer"/> and <see cref="ScoreAnswer"/>;
+    /// <see langword="true"/> for <see cref="ChoiceAnswer"/> and <see cref="ScoreAnswer"/>, and for
+    /// a <see cref="BoxAnswer"/> whose confidence the API reported;
     /// <see langword="false"/> for every other answer, including <see cref="NoulAnswer"/>, which
     /// deliberately has no confidence of its own.
     /// </returns>

@@ -74,7 +74,7 @@ public static class TypeSafeDefaults
     /// </summary>
     /// <remarks>
     /// <c>jev-latest</c> is an alias. The response's <see cref="SystemOneResult.Model"/> reports
-    /// the concrete version the alias resolved to, such as <c>jev-1.13.0</c>, and the alias can
+    /// the concrete version the alias resolved to, such as <c>jev-1.14.0</c>, and the alias can
     /// resolve differently over time.
     /// </remarks>
     public const string DefaultModel = "jev-latest";
@@ -113,13 +113,53 @@ public static class TypeSafeDefaults
     public const int MaximumChoiceOptions = 255;
 
     /// <summary>
-    /// The approximate number of tokens shared between <c>state</c> and <c>questions</c> in a
-    /// single request, equivalent to roughly 150,000 characters of English text.
+    /// The approximate number of tokens shared between <c>state</c> and all <c>questions</c> in a
+    /// single request: the documented per-request context of Jev 1.13 and Jev 1.14.
     /// </summary>
     /// <remarks>
     /// The API publishes no token-counting endpoint, so the SDK cannot enforce this. It is
     /// documented here so callers can size their batches. Batching every question into one
-    /// request is dramatically cheaper and faster than one request per question.
+    /// request is dramatically cheaper and faster than one request per question. The state plus
+    /// any one question must also fit <see cref="ApproximateQuestionTokenBudget"/>.
     /// </remarks>
-    public const int ApproximateRequestTokenBudget = 32_000;
+    public const int ApproximateRequestTokenBudget = 64_000;
+
+    /// <summary>
+    /// The approximate number of tokens the <c>state</c> plus any one question may use: the
+    /// documented per-question context of Jev 1.13 and Jev 1.14.
+    /// </summary>
+    /// <remarks>
+    /// Like <see cref="ApproximateRequestTokenBudget"/>, this is informational and not enforced.
+    /// </remarks>
+    public const int ApproximateQuestionTokenBudget = 32_000;
+
+    /// <summary>
+    /// The approximate per-request and per-question context when
+    /// <see cref="TypeSafeRequestOptions.LongContext"/> is turned on.
+    /// </summary>
+    /// <remarks>
+    /// Long context costs the same per token, but is slower and less accurate than staying
+    /// within the default limits, so turn it on only for requests that need it.
+    /// </remarks>
+    public const int ApproximateLongContextTokenBudget = 262_000;
+
+    /// <summary>
+    /// The request header that turns on images and Box questions.
+    /// </summary>
+    /// <remarks>
+    /// The SDK sends this header with the value <c>true</c> automatically on any request that
+    /// carries <see cref="SystemOneRequest.Assets"/> or a <see cref="BoxQuestion"/>. A value set
+    /// through <see cref="TypeSafeRequestOptions.Headers"/> wins.
+    /// </remarks>
+    public const string ImagesHeader = "TypeSafe-Danger-Zone-Images";
+
+    /// <summary>
+    /// The request header that raises both context limits to
+    /// <see cref="ApproximateLongContextTokenBudget"/>.
+    /// </summary>
+    /// <remarks>
+    /// Sent with the value <c>true</c> when <see cref="TypeSafeRequestOptions.LongContext"/> is
+    /// <see langword="true"/>.
+    /// </remarks>
+    public const string LongContextHeader = "TypeSafe-Danger-Zone-Long-Context";
 }

@@ -123,7 +123,7 @@ public static class TypeSafeJson
         var additional = request.AdditionalProperties ?? request.Options?.AdditionalBodyProperties;
 
         return Encoding.UTF8.GetString(
-            TypeSafeRequestWriter.Write(request.State, model, request.Questions, additional));
+            TypeSafeRequestWriter.Write(request.State, model, request.Questions, request.Assets, additional));
     }
 
     /// <summary>

@@ -167,6 +167,63 @@ the answer hard to interpret, and the overlap shows up as low confidence and hig
 Both are exposed as constants on `TypeSafeDefaults` — `MinimumScoreLevels`, `MaximumScoreLevels`,
 and `MaximumChoiceOptions` — so validation code does not have to hard-code them.
 
+## Box: where something is in an image
+
+> **Experimental.** TypeSafe labels images and Box questions as not yet production-ready. The request
+> format, the answers, and the limits can change between releases. Box questions need Jev 1.14
+> (`jev-1.14.0`, which `jev-latest` points to).
+
+A `BoxQuestion` locates what its instructions describe in the request's image. The answer is the
+four edges of a box, as fractions of the image's height and width, measured from the top and from
+the left:
+
+```csharp
+using System.Text.Json.Nodes;
+using TypeSafeAI;
+
+var photo = Guid.NewGuid().ToString();
+var findDog = new BoxQuestion("dog", "Locate the dog.");
+
+var result = await client.SystemOneAsync(new SystemOneRequest
+{
+    State = new JsonObject { ["photo"] = photo },
+    Assets = new Dictionary<string, ImageAsset>
+    {
+        [photo] = await ImageAsset.FromFileAsync("feeder.jpg"),
+    },
+    Questions = [findDog, new NoulQuestion("has_dog", "Is there a dog in `photo`?")],
+});
+
+BoxAnswer box = result.Get(findDog);
+Console.WriteLine($"top={box.Top} left={box.Left} width={box.Width} height={box.Height}");
+```
+
+A box answer always reports a box, so pair it with a noul when the thing may be absent.
+`BoxAnswer.Confidence` is `null` when the model provides none; `TryGetConfidence` then returns
+`false` rather than inventing a value.
+
+### Images
+
+An image can go anywhere text can go: in the state, in a question's instructions, and in its
+criteria. Each image is listed once in `SystemOneRequest.Assets`, keyed by a reference string.
+Write the reference wherever the image belongs, as a whole string value or inside a longer string,
+and the model receives the image in its place.
+
+- Every asset must be referenced at least once, or the API returns `400`.
+- Object keys are never replaced, so a choice label stays text; put the reference in its
+  description instead.
+- References match as plain text anywhere in the request, so use one that cannot occur by
+  accident. A new `Guid` per image is the safest choice.
+- Each use adds another copy of the image to what the model reads.
+
+`ImageAsset.FromBytes` and `ImageAsset.FromFileAsync` detect PNG or JPEG from the file's
+signature. `ImageAsset.FromBase64` takes an already encoded image and its `ImageFormat`. Those are
+the only two formats the API accepts.
+
+The SDK sends the required `TypeSafe-Danger-Zone-Images: true` header automatically on any request
+that carries assets or a `BoxQuestion`. A value you set through `TypeSafeRequestOptions.Headers`
+wins.
+
 ## Asking many questions at once
 
 Every question in a request sees the same state, is evaluated independently, and answers under the
@@ -201,10 +258,16 @@ otherwise produce a confusing answer into an immediate `ArgumentException`.
 
 ## Budget
 
-The state and the questions share an approximate budget of **32,000 tokens** per request, roughly
-150,000 characters of English text. The API publishes no token-counting endpoint, so the SDK cannot
-enforce it; it is documented on `TypeSafeDefaults.ApproximateRequestTokenBudget` so you can size
-batches yourself. If a batch is too large, split it by state rather than by question — one request
+Jev 1.13 and Jev 1.14 have two context limits. The state plus **all** questions must fit about
+**64,000 tokens** (`TypeSafeDefaults.ApproximateRequestTokenBudget`), and the state plus **any one**
+question must fit about **32,000 tokens** (`TypeSafeDefaults.ApproximateQuestionTokenBudget`). The
+API publishes no token-counting endpoint, so the SDK cannot enforce either; they are documented so
+you can size batches yourself.
+
+When a single state is too large, set `TypeSafeRequestOptions.LongContext = true`. The SDK then
+sends `TypeSafe-Danger-Zone-Long-Context: true`, which raises both limits to about 262,000 tokens.
+It costs the same per token but is slower and less accurate, so turn it on only for the requests
+that need it. If a batch is too large, split it by state rather than by question — one request
 per batch of questions over the same state is dramatically cheaper and faster than one request per
 question.
 

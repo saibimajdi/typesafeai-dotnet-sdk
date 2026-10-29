@@ -33,6 +33,18 @@ public sealed class TypeSafeRequestOptions
     public TimeSpan? Timeout { get; init; }
 
     /// <summary>
+    /// Gets whether to turn on long context for this call, raising both the per-request and the
+    /// per-question context to about <see cref="TypeSafeDefaults.ApproximateLongContextTokenBudget"/>
+    /// tokens.
+    /// </summary>
+    /// <remarks>
+    /// When <see langword="true"/>, the SDK sends the <see cref="TypeSafeDefaults.LongContextHeader"/>
+    /// header. Long context costs the same per token but is slower and less accurate than staying
+    /// within the default limits, so turn it on only for requests that need it.
+    /// </remarks>
+    public bool? LongContext { get; init; }
+
+    /// <summary>
     /// Gets additional request headers for this call, merged over the client's default headers.
     /// </summary>
     public IReadOnlyDictionary<string, string>? Headers { get; init; }

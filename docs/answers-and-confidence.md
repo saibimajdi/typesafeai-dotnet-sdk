@@ -208,7 +208,7 @@ using TypeSafeAI.Serialization;
 
 var result = await client.SystemOneAsync(state, questions);
 
-// The resolved model, not the alias you asked for: "jev-latest" may come back as "jev-1.13.0",
+// The resolved model, not the alias you asked for: "jev-latest" may come back as "jev-1.14.0",
 // and the alias may resolve differently later.
 Console.WriteLine($"model {result.Model}, request {result.RequestId}");
 Console.WriteLine($"tokens in {result.Usage?.InputTokens}, out {result.Usage?.OutputTokens}");

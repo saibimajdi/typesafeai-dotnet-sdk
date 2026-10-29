@@ -27,17 +27,20 @@ internal static class TypeSafeRequestWriter
     /// <param name="state">The state to evaluate.</param>
     /// <param name="model">The resolved model name.</param>
     /// <param name="questions">The questions to ask.</param>
+    /// <param name="assets">The images to send, keyed by reference, or <see langword="null"/>.</param>
     /// <param name="additional">Extra top-level fields, merged last.</param>
     /// <returns>The UTF-8 encoded request body.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="questions"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
     /// <paramref name="state"/> is <see langword="null"/>, no questions were supplied, two questions
-    /// share an id, or <paramref name="additional"/> contains the removed <c>document</c> field.
+    /// share an id, an asset reference is empty or whitespace, or <paramref name="additional"/>
+    /// contains the removed <c>document</c> field.
     /// </exception>
     public static byte[] Write(
         JsonNode? state,
         string model,
         IEnumerable<Question> questions,
+        IReadOnlyDictionary<string, ImageAsset>? assets,
         IReadOnlyDictionary<string, JsonNode?>? additional)
     {
         ArgumentNullException.ThrowIfNull(questions);
@@ -54,6 +57,7 @@ internal static class TypeSafeRequestWriter
         }
 
         ValidateAdditional(additional);
+        ValidateAssets(assets);
 
         var (orderedIds, byId) = IndexQuestions(questions);
 
@@ -69,6 +73,7 @@ internal static class TypeSafeRequestWriter
             WriteState(writer, state, additional);
             WriteModel(writer, model, additional);
             WriteQuestions(writer, orderedIds, byId, additional);
+            WriteAssets(writer, assets, additional);
             WriteRemainingAdditionalFields(writer, additional);
 
             writer.WriteEndObject();
@@ -91,6 +96,27 @@ internal static class TypeSafeRequestWriter
                 "it fails validation. Send the content as 'state' instead. See " +
                 "https://docs.typesafe.ai/migrating-to-v1.",
                 nameof(additional));
+        }
+    }
+
+    private static void ValidateAssets(IReadOnlyDictionary<string, ImageAsset>? assets)
+    {
+        if (assets is null)
+        {
+            return;
+        }
+
+        foreach (var (reference, asset) in assets)
+        {
+            if (string.IsNullOrWhiteSpace(reference))
+            {
+                throw new ArgumentException(
+                    "An asset reference cannot be empty or whitespace. Use a string that cannot " +
+                    "occur in your text by accident, such as a new GUID per image.",
+                    nameof(assets));
+            }
+
+            ArgumentNullException.ThrowIfNull(asset, nameof(assets));
         }
     }
 
@@ -195,6 +221,38 @@ internal static class TypeSafeRequestWriter
         writer.WriteEndObject();
     }
 
+    private static void WriteAssets(
+        Utf8JsonWriter writer,
+        IReadOnlyDictionary<string, ImageAsset>? assets,
+        IReadOnlyDictionary<string, JsonNode?>? additional)
+    {
+        if (additional is not null && additional.ContainsKey("assets"))
+        {
+            WriteNode(writer, "assets", additional["assets"]);
+            return;
+        }
+
+        if (assets is null || assets.Count == 0)
+        {
+            // Omitted rather than written empty: the API requires at least one entry when the
+            // member is present.
+            return;
+        }
+
+        writer.WriteStartObject("assets");
+
+        foreach (var (reference, asset) in assets)
+        {
+            writer.WriteStartObject(reference);
+            writer.WriteString("type", "image");
+            writer.WriteString("format", asset.WireFormat);
+            writer.WriteString("data_base64", asset.DataBase64);
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndObject();
+    }
+
     private static void WriteRemainingAdditionalFields(
         Utf8JsonWriter writer,
         IReadOnlyDictionary<string, JsonNode?>? additional)
@@ -206,7 +264,7 @@ internal static class TypeSafeRequestWriter
 
         foreach (var (name, value) in additional)
         {
-            if (name is "state" or "model" or "questions")
+            if (name is "state" or "model" or "questions" or "assets")
             {
                 continue;
             }

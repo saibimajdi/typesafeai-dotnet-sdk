@@ -81,6 +81,8 @@ public sealed class AnswerJsonConverter : JsonConverter<Answer>
                 ReadRequiredDouble(element, "confidence"),
                 ReadAdditional(element, "score", "legend", "probabilities", "confidence")),
 
+            "box" => ReadBox(element, id),
+
             _ => new UnknownAnswer(
                 id,
                 type.Length == 0 ? "unknown" : type,
@@ -138,17 +140,12 @@ public sealed class AnswerJsonConverter : JsonConverter<Answer>
                 writer.WriteNumber("confidence", score.Confidence);
                 break;
 
+            case BoxAnswer box:
+                WriteBox(writer, box);
+                break;
+
             case UnknownAnswer unknown:
-                foreach (var property in unknown.Raw.EnumerateObject())
-                {
-                    if (property.NameEquals("type") || property.NameEquals("id"))
-                    {
-                        continue;
-                    }
-
-                    property.WriteTo(writer);
-                }
-
+                WriteUnknownBody(writer, unknown);
                 break;
         }
 
@@ -178,6 +175,64 @@ public sealed class AnswerJsonConverter : JsonConverter<Answer>
                 extra.WriteTo(writer);
             }
         }
+    }
+
+    private static void WriteUnknownBody(Utf8JsonWriter writer, UnknownAnswer unknown)
+    {
+        foreach (var property in unknown.Raw.EnumerateObject())
+        {
+            if (property.NameEquals("type") || property.NameEquals("id"))
+            {
+                continue;
+            }
+
+            property.WriteTo(writer);
+        }
+    }
+
+    private static void WriteBox(Utf8JsonWriter writer, BoxAnswer box)
+    {
+        writer.WriteStartObject("box");
+        writer.WriteNumber("top", box.Top);
+        writer.WriteNumber("bottom", box.Bottom);
+        writer.WriteNumber("left", box.Left);
+        writer.WriteNumber("right", box.Right);
+        writer.WriteEndObject();
+
+        // Written as null rather than omitted, matching the wire format, where the member is
+        // required but nullable.
+        if (box.Confidence is { } confidence)
+        {
+            writer.WriteNumber("confidence", confidence);
+        }
+        else
+        {
+            writer.WriteNull("confidence");
+        }
+    }
+
+    private static BoxAnswer ReadBox(JsonElement element, string id)
+    {
+        if (!element.TryGetProperty("box", out var box) || box.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("A box answer must carry an object 'box' member.");
+        }
+
+        // Box confidence is nullable on the wire: the API sends null when the model provides none,
+        // and the SDK must not turn that into a real value of zero.
+        double? confidence = element.TryGetProperty("confidence", out var confidenceElement) &&
+                             confidenceElement.ValueKind == JsonValueKind.Number
+            ? confidenceElement.GetDouble()
+            : null;
+
+        return new BoxAnswer(
+            id,
+            ReadRequiredDouble(box, "top"),
+            ReadRequiredDouble(box, "bottom"),
+            ReadRequiredDouble(box, "left"),
+            ReadRequiredDouble(box, "right"),
+            confidence,
+            ReadAdditional(element, "box", "confidence"));
     }
 
     private static double ReadRequiredDouble(JsonElement element, string name)

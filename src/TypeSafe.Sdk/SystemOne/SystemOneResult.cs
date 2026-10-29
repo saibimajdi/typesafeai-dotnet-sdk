@@ -26,6 +26,7 @@ public sealed class SystemOneResult
     private readonly Dictionary<string, NoulAnswer> _nouls;
     private readonly Dictionary<string, ChoiceAnswer> _choices;
     private readonly Dictionary<string, ScoreAnswer> _scores;
+    private readonly Dictionary<string, BoxAnswer> _boxes;
     private readonly Dictionary<string, UnknownAnswer> _unknown;
 
     /// <summary>
@@ -45,6 +46,7 @@ public sealed class SystemOneResult
         _nouls = new Dictionary<string, NoulAnswer>(StringComparer.Ordinal);
         _choices = new Dictionary<string, ChoiceAnswer>(StringComparer.Ordinal);
         _scores = new Dictionary<string, ScoreAnswer>(StringComparer.Ordinal);
+        _boxes = new Dictionary<string, BoxAnswer>(StringComparer.Ordinal);
         _unknown = new Dictionary<string, UnknownAnswer>(StringComparer.Ordinal);
 
         foreach (var (id, answer) in _answers)
@@ -59,6 +61,9 @@ public sealed class SystemOneResult
                     break;
                 case ScoreAnswer score:
                     _scores[id] = score;
+                    break;
+                case BoxAnswer box:
+                    _boxes[id] = box;
                     break;
                 case UnknownAnswer unknown:
                     _unknown[id] = unknown;
@@ -75,7 +80,7 @@ public sealed class SystemOneResult
     /// </summary>
     /// <remarks>
     /// This is the <em>resolved</em> model, not the alias that was requested: sending
-    /// <c>jev-latest</c> and reading <c>jev-1.13.0</c> here is expected, and the alias may resolve
+    /// <c>jev-latest</c> and reading <c>jev-1.14.0</c> here is expected, and the alias may resolve
     /// differently later. Record this value alongside any decision that must stay reproducible.
     /// </remarks>
     public string Model { get; }
@@ -109,6 +114,11 @@ public sealed class SystemOneResult
     /// Gets the score answers, keyed by question id.
     /// </summary>
     public IReadOnlyDictionary<string, ScoreAnswer> Scores => _scores;
+
+    /// <summary>
+    /// Gets the box answers, keyed by question id.
+    /// </summary>
+    public IReadOnlyDictionary<string, BoxAnswer> Boxes => _boxes;
 
     /// <summary>
     /// Gets the answers whose kind this SDK version does not model, keyed by question id.
@@ -263,6 +273,16 @@ public sealed class SystemOneResult
     /// The response contains no answer with that id, or the answer is not a score answer.
     /// </exception>
     public ScoreAnswer Score(string id) => Require<ScoreAnswer>(id, "score");
+
+    /// <summary>
+    /// Gets a box answer by question id.
+    /// </summary>
+    /// <param name="id">The question id.</param>
+    /// <returns>The box answer.</returns>
+    /// <exception cref="KeyNotFoundException">
+    /// The response contains no answer with that id, or the answer is not a box answer.
+    /// </exception>
+    public BoxAnswer Box(string id) => Require<BoxAnswer>(id, "box");
 
     /// <summary>
     /// Determines whether the response contains an answer with the given id.
