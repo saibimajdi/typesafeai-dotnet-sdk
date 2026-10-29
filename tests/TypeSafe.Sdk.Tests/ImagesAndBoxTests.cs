@@ -169,6 +169,27 @@ public sealed class ImagesAndBoxTests
     }
 
     [Fact]
+    public async Task ImagesHeaderIsSentForAssetsPassedAsAnAdditionalBodyField()
+    {
+        var (client, handler) = TestClient.Returning(Fixtures.NoulResponse);
+
+        await client.SystemOneAsync(new SystemOneRequest
+        {
+            State = "photo",
+            Questions = [new NoulQuestion("a", "Is there a dog in this picture: photo?")],
+            AdditionalProperties = new Dictionary<string, JsonNode?>
+            {
+                ["assets"] = new JsonObject
+                {
+                    ["photo"] = new JsonObject { ["type"] = "image", ["format"] = "png", ["data_base64"] = RedRectanglePng },
+                },
+            },
+        });
+
+        Assert.Equal("true", handler.LastRequest.Headers[TypeSafeDefaults.ImagesHeader]);
+    }
+
+    [Fact]
     public async Task TextOnlyRequestsSendNoDangerZoneHeadersAndNoAssets()
     {
         var (client, handler) = TestClient.Returning(Fixtures.NoulResponse);
@@ -238,6 +259,8 @@ public sealed class ImagesAndBoxTests
         Assert.Throws<ArgumentException>(() => ImageAsset.FromBytes(ReadOnlySpan<byte>.Empty, ImageFormat.Png));
         Assert.Throws<ArgumentException>(() => ImageAsset.FromBase64("data:image/png;base64,AAAA", ImageFormat.Png));
         Assert.Throws<ArgumentException>(() => ImageAsset.FromBase64("not base64!", ImageFormat.Png));
+        Assert.Throws<ArgumentException>(() => ImageAsset.FromBase64("AAAA\nAAAA", ImageFormat.Png));
+        Assert.Throws<ArgumentException>(() => ImageAsset.FromBase64("AAAA AAAA", ImageFormat.Png));
     }
 
     [Fact]

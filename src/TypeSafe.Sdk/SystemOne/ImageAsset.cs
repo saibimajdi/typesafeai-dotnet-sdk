@@ -96,7 +96,9 @@ public sealed class ImageAsset
                 nameof(dataBase64));
         }
 
-        if (!System.Buffers.Text.Base64.IsValid(dataBase64))
+        // Base64.IsValid tolerates whitespace, but the API requires none, so it is rejected first.
+        if (dataBase64.AsSpan().IndexOfAny(" \t\r\n") >= 0 ||
+            !System.Buffers.Text.Base64.IsValid(dataBase64))
         {
             throw new ArgumentException("The image data is not valid base64.", nameof(dataBase64));
         }

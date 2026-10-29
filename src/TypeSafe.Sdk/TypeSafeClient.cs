@@ -235,7 +235,12 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
 
         // Materialised once so the questions can be both inspected for box questions and written.
         var questionList = questions as IReadOnlyCollection<Question> ?? questions.ToList();
-        var usesImages = assets is { Count: > 0 } || questionList.Any(question => question is BoxQuestion);
+        // Assets sent through the additional-properties escape hatch need the same opt-in header as
+        // typed ones, and that dictionary replaces the request options' one when both are set.
+        var additionalBody = additionalBodyProperties ?? requestOptions?.AdditionalBodyProperties;
+        var usesImages = assets is { Count: > 0 } ||
+                         additionalBody?.GetValueOrDefault("assets") is not null ||
+                         questionList.Any(question => question is BoxQuestion);
 
         var effective = Merge(requestOptions, model, additionalBodyProperties, usesImages);
         var effectiveModel = effective?.Model ?? _defaultModel;
