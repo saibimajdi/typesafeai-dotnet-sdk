@@ -124,22 +124,25 @@ state, an arbitrary `TState` with a `JsonTypeInfo<TState>` (trim/AOT-safe), and 
 | `NoulQuestion` | `NoulAnswer` | `noul` |
 | `ChoiceQuestion` | `ChoiceAnswer` | `choice` |
 | `ScoreQuestion` | `ScoreAnswer` | `score` |
+| `BoxQuestion` | `BoxAnswer` | `box` (experimental, needs an image) |
 | `RawQuestion` | `UnknownAnswer` (or a modelled answer if the kind matches) | caller-supplied |
 | `QuestionSet` | — | an ordered, duplicate-rejecting collection of questions |
 | `NoulCriteria` | — | optional descriptions of what yes and no mean |
 
 A `NoulQuestion` asks a yes/no question. A `ChoiceQuestion` selects one label from a set of up
-to 255 you supply. A `ScoreQuestion` places the state on an ordered rubric of 2 to 10 levels.
+to 255 you supply. A `ScoreQuestion` places the state on an ordered rubric of 2 to 10 levels. A `BoxQuestion` finds where something is in an image sent through
+`SystemOneRequest.Assets` as an `ImageAsset`; images and Box questions are experimental API features.
 See [docs/questions.md](https://github.com/saibimajdi/typesafeai-dotnet-sdk/blob/main/docs/questions.md).
 
 ### Answers
 
 | Type | Members |
 | --- | --- |
-| `SystemOneResult` | `Noul(id)`, `Choice(id)`, `Score(id)`, `Get(id)`, `TryGet(id, …)`, `Get<TAnswer>(question)`, `TryGet<TAnswer>(question, …)`, `Contains(id)`, `Ids`, `Answers`, `Nouls`, `Choices`, `Scores`, `UnknownAnswers`, `Model`, `Usage`, `RequestId`, `RawJson` |
+| `SystemOneResult` | `Noul(id)`, `Choice(id)`, `Score(id)`, `Box(id)`, `Get(id)`, `TryGet(id, …)`, `Get<TAnswer>(question)`, `TryGet<TAnswer>(question, …)`, `Contains(id)`, `Ids`, `Answers`, `Nouls`, `Choices`, `Scores`, `Boxes`, `UnknownAnswers`, `Model`, `Usage`, `RequestId`, `RawJson` |
 | `NoulAnswer` | `Probability` — a calibrated probability from `0` to `1`. No confidence; see below. |
 | `ChoiceAnswer` | `Label`, `Confidence`, `Probabilities`, `TopLabel`, `TopProbability`, `ProbabilityOf`, `ProbabilityOrDefault`, `TryGetProbability`, `Ranked()`, `Top(n)`, `NormalizedEntropy()` |
 | `ScoreAnswer` | `Score`, `Confidence`, `Legend`, `Probabilities`, `LevelCount`, `MaxLevel`, `NormalizedScore`, `ExpectedLevel`, `Variance`, `ProbabilityAtLevel`, `TryGetProbability`, `LegendAtLevel`, `LegendTextAtLevel`, `NormalizedEntropy()` |
+| `BoxAnswer` | `Top`, `Bottom`, `Left`, `Right`, `Width`, `Height`, `Confidence` (nullable) |
 | `UnknownAnswer` | `Type`, `Raw` — for answer kinds newer than this SDK release |
 | `Answer` | `Id`, `Type`, `AdditionalProperties`, `TryGetConfidence(out double)` |
 

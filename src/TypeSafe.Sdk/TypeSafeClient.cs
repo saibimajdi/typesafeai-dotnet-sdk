@@ -132,6 +132,7 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
         return SystemOneAsync(
             request.State,
             request.Questions,
+            request.Assets,
             request.Model,
             request.AdditionalProperties,
             request.Options,
@@ -149,6 +150,7 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
         return SystemOneAsync(
             JsonValue.Create(state),
             questions,
+            assets: null,
             model: null,
             additionalBodyProperties: null,
             requestOptions: null,
@@ -163,6 +165,7 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
         SystemOneAsync(
             state,
             questions,
+            assets: null,
             model: null,
             additionalBodyProperties: null,
             requestOptions: null,
@@ -180,6 +183,7 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
         return SystemOneAsync(
             JsonSerializer.SerializeToNode(state, stateTypeInfo),
             questions,
+            assets: null,
             model: null,
             additionalBodyProperties: null,
             requestOptions: null,
@@ -199,6 +203,7 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
             // property names are preserved exactly as declared.
             JsonSerializer.SerializeToNode(state),
             questions,
+            assets: null,
             model: null,
             additionalBodyProperties: null,
             requestOptions: null,
@@ -219,6 +224,7 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
     private async Task<SystemOneResult> SystemOneAsync(
         JsonNode? state,
         IEnumerable<Question> questions,
+        IReadOnlyDictionary<string, ImageAsset>? assets,
         string? model,
         IReadOnlyDictionary<string, JsonNode?>? additionalBodyProperties,
         TypeSafeRequestOptions? requestOptions,
@@ -227,10 +233,14 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(questions);
 
-        var effective = Merge(requestOptions, model, additionalBodyProperties);
+        // Materialised once so the questions can be both inspected for box questions and written.
+        var questionList = questions as IReadOnlyCollection<Question> ?? questions.ToList();
+        var usesImages = assets is { Count: > 0 } || questionList.Any(question => question is BoxQuestion);
+
+        var effective = Merge(requestOptions, model, additionalBodyProperties, usesImages);
         var effectiveModel = effective?.Model ?? _defaultModel;
 
-        var body = TypeSafeRequestWriter.Write(state, effectiveModel, questions, effective?.AdditionalBodyProperties);
+        var body = TypeSafeRequestWriter.Write(state, effectiveModel, questionList, assets, effective?.AdditionalBodyProperties);
 
         var response = await _transport
             .SendAsync(HttpMethod.Post, SystemOneUri, body, "systemone", effective, cancellationToken)
@@ -242,18 +252,21 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
     private ILogger Logger => _options.LoggerFactory?.CreateLogger("TypeSafe.Sdk") ?? NullLogger.Instance;
 
     /// <summary>
-    /// Folds the request-level model and body fields into the per-call options.
+    /// Folds the request-level model, body fields, and feature headers into the per-call options.
     /// </summary>
     /// <remarks>
-    /// Returns <see langword="null"/> when nothing was overridden, so the common path allocates
-    /// nothing and inherits every client setting.
+    /// Returns the caller's options unchanged when nothing was overridden, so the common path
+    /// allocates nothing and inherits every client setting.
     /// </remarks>
     private static TypeSafeRequestOptions? Merge(
         TypeSafeRequestOptions? requestOptions,
         string? model,
-        IReadOnlyDictionary<string, JsonNode?>? additionalBodyProperties)
+        IReadOnlyDictionary<string, JsonNode?>? additionalBodyProperties,
+        bool usesImages)
     {
-        if (model is null && additionalBodyProperties is null)
+        var longContext = requestOptions?.LongContext == true;
+
+        if (model is null && additionalBodyProperties is null && !usesImages && !longContext)
         {
             return requestOptions;
         }
@@ -263,9 +276,47 @@ public sealed class TypeSafeClient : ITypeSafeClient, IDisposable
             Model = model ?? requestOptions?.Model,
             Retry = requestOptions?.Retry,
             Timeout = requestOptions?.Timeout,
-            Headers = requestOptions?.Headers,
+            LongContext = requestOptions?.LongContext,
+            Headers = FeatureHeaders(requestOptions?.Headers, usesImages, longContext),
             AdditionalBodyProperties = additionalBodyProperties ?? requestOptions?.AdditionalBodyProperties,
         };
+    }
+
+    /// <summary>
+    /// Adds the opt-in headers a request's features need, without overriding a caller's value.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string>? FeatureHeaders(
+        IReadOnlyDictionary<string, string>? headers,
+        bool usesImages,
+        bool longContext)
+    {
+        if (!usesImages && !longContext)
+        {
+            return headers;
+        }
+
+        var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (usesImages)
+        {
+            merged[TypeSafeDefaults.ImagesHeader] = "true";
+        }
+
+        if (longContext)
+        {
+            merged[TypeSafeDefaults.LongContextHeader] = "true";
+        }
+
+        if (headers is not null)
+        {
+            // Caller headers are applied last so an explicit value always wins.
+            foreach (var (name, value) in headers)
+            {
+                merged[name] = value;
+            }
+        }
+
+        return merged;
     }
 
     /// <summary>

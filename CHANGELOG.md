@@ -14,6 +14,9 @@ it can happen by accident.
 
 ### Changed
 
+- `TypeSafeDefaults.ApproximateRequestTokenBudget` is now `64_000`, matching the documented
+  per-request context of Jev 1.13 and 1.14; the per-question limit of `32_000` moved to the new
+  `ApproximateQuestionTokenBudget`.
 - The NuGet package IDs are now `TypeSafeAI.Sdk` and
   `TypeSafeAI.Sdk.DependencyInjection`. The public C# namespaces are now `TypeSafeAI`,
   `TypeSafeAI.Serialization`, and `TypeSafeAI.DependencyInjection`; assembly names remain
@@ -23,6 +26,22 @@ it can happen by accident.
   `saibimajdi/typesafeai-dotnet-sdk` GitHub repository.
 
 ### Added
+
+- Support for the Jev 1.14 release (`jev-1.14.0`, which `jev-latest` now resolves to). The default
+  model is still the `jev-latest` alias, so no code change is needed to use it.
+- `BoxQuestion` and `BoxAnswer` (experimental): locate what the instructions describe in an image.
+  The answer carries `Top`, `Bottom`, `Left`, and `Right` as fractions of the image, plus `Width`,
+  `Height`, and a nullable `Confidence`. `SystemOneResult` gains `Boxes` and `Box(id)`.
+- `ImageAsset`, `ImageFormat`, and `SystemOneRequest.Assets` (experimental): send PNG or JPEG
+  images base64-encoded in the request, referenced by placeholder from the state, instructions, or
+  criteria. `ImageAsset.FromBytes` and `ImageAsset.FromFileAsync` detect the format from the file
+  signature.
+- The `TypeSafe-Danger-Zone-Images: true` header is sent automatically on any request that carries
+  assets or a `BoxQuestion`; a caller-supplied value wins.
+- `TypeSafeRequestOptions.LongContext`, which sends `TypeSafe-Danger-Zone-Long-Context: true` to
+  raise both context limits to about 262k tokens.
+- `TypeSafeDefaults.ImagesHeader`, `LongContextHeader`, `ApproximateQuestionTokenBudget`, and
+  `ApproximateLongContextTokenBudget`.
 
 - A searchable SDK documentation site with light/dark themes and automated GitHub Pages
   deployment, built from the existing Markdown guides and validated on pull requests.

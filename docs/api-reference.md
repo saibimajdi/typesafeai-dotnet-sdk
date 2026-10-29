@@ -109,6 +109,7 @@ at least one question with a unique id.
 | --- | --- | --- |
 | `State` | `JsonNode?` | Required text, object, or array to evaluate. The value itself must not be `null`. |
 | `Questions` | `IEnumerable<Question>` | Required non-empty collection with unique ids. |
+| `Assets` | `IReadOnlyDictionary<string, ImageAsset>?` | Images keyed by the reference string that stands for each one. Experimental; see [Images](questions.md#images). |
 | `Model` | `string?` | Model for this request, or the client default. |
 | `Options` | `TypeSafeRequestOptions?` | Per-call retry, timeout, header, model, and body overrides. |
 | `AdditionalProperties` | `IReadOnlyDictionary<string, JsonNode?>?` | Extra top-level request fields, merged last. |
@@ -120,6 +121,7 @@ at least one question with a unique id.
 | `Model` | `string?` | Overrides the client model for one call. `SystemOneRequest.Model` wins when both are set. |
 | `Retry` | `RetryPolicy?` | Overrides the client retry policy. Use `RetryPolicy.None` to disable retries. |
 | `Timeout` | `TimeSpan?` | Overrides the per-attempt timeout. |
+| `LongContext` | `bool?` | When `true`, sends `TypeSafe-Danger-Zone-Long-Context: true`, raising both context limits to about 262k tokens. |
 | `Headers` | `IReadOnlyDictionary<string, string>?` | Merged over the client default headers. |
 | `AdditionalBodyProperties` | `IReadOnlyDictionary<string, JsonNode?>?` | Extra top-level fields, merged last. |
 
@@ -135,6 +137,7 @@ All question ids are local map keys. They are not sent inside the individual que
 | `NoulQuestion` | `(id, instructions?, criteria?, additionalProperties?)` | `NoulAnswer` |
 | `ChoiceQuestion` | `(id, instructions, labels, additionalProperties?)` or `(id, instructions, criteria, additionalProperties?)` | `ChoiceAnswer` |
 | `ScoreQuestion` | `(id, instructions, levels, additionalProperties?)` | `ScoreAnswer` |
+| `BoxQuestion` | `(id, instructions?, additionalProperties?)` | `BoxAnswer` |
 | `RawQuestion` | `(id, type, body)` | A known answer type or `UnknownAnswer` |
 
 `QuestionSet` is an ordered collection that rejects duplicate ids when they are added. The client
@@ -145,7 +148,7 @@ See [Questions](questions.md) for criteria shapes, limits, and complete examples
 ## Results and answers
 
 `SystemOneResult` exposes all answers through `Answers` and typed views through `Nouls`, `Choices`,
-`Scores`, and `UnknownAnswers`.
+`Scores`, `Boxes`, and `UnknownAnswers`.
 
 | Member | Meaning |
 | --- | --- |
@@ -153,7 +156,7 @@ See [Questions](questions.md) for criteria shapes, limits, and complete examples
 | `Get(question)` | Return the answer type bound to an `IQuestion<TAnswer>`. |
 | `TryGet(id, out answer)` | Non-throwing lookup by id. |
 | `TryGet(question, out answer)` | Non-throwing, strongly typed lookup. |
-| `Noul(id)`, `Choice(id)`, `Score(id)` | Return a specific answer kind. |
+| `Noul(id)`, `Choice(id)`, `Score(id)`, `Box(id)` | Return a specific answer kind. |
 | `Contains(id)`, `Ids` | Inspect which answers were returned. |
 | `Model` | Concrete model reported by the API. |
 | `Usage` | Input, output, and total token counts when reported. |
@@ -167,6 +170,7 @@ See [Questions](questions.md) for criteria shapes, limits, and complete examples
 | `NoulAnswer` | `Probability`; a noul deliberately has no confidence property. |
 | `ChoiceAnswer` | `Label`, `Confidence`, `Probabilities`, `TopLabel`, `TopProbability`, `Ranked()`, `Top(n)`, `ProbabilityOf(label)`, `NormalizedEntropy()`. |
 | `ScoreAnswer` | `Score`, `NormalizedScore`, `ExpectedLevel`, `Confidence`, `Variance`, `Legend`, `Probabilities`, `ProbabilityAtLevel(level)`, `NormalizedEntropy()`. |
+| `BoxAnswer` | `Top`, `Bottom`, `Left`, `Right` as fractions of the image, `Width`, `Height`, and a nullable `Confidence`. |
 | `UnknownAnswer` | `Type` and the complete answer object in `Raw`. |
 
 Every answer also carries `Id`, `Type`, `AdditionalProperties`, and

@@ -34,8 +34,9 @@ else if (result.Contains("department"))
 ```
 
 The alternative — one request per question — is dramatically more expensive and slower for the same
-answers. The only reason to split is the token budget: state and questions share roughly 32,000
-tokens per request, so split by state, not by question.
+answers. The only reason to split is the token budget: the state and all questions share roughly
+64,000 tokens per request, and the state plus any one question roughly 32,000, so split by state,
+not by question.
 
 Because the API does not promise an answer for every id, use `TryGet` for anything speculative.
 `Ids` tells you which questions were answered.

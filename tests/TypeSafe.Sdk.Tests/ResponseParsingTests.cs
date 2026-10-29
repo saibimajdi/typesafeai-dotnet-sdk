@@ -227,7 +227,7 @@ public sealed class ResponseParsingTests
 
         // The request asked for jev-latest; the response reports what the alias resolved to, which
         // is what a reproducible decision must record.
-        Assert.Equal("jev-1.13.0", result.Model);
+        Assert.Equal("jev-1.14.0", result.Model);
     }
 
     [Fact]

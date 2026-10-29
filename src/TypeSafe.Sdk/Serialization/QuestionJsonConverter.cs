@@ -63,6 +63,9 @@ public sealed class QuestionJsonConverter : JsonConverter<Question>
             case "score":
                 return new ScoreQuestion(id, instructions, ReadScoreCriteria(element), ReadAdditional(element, "criteria"));
 
+            case "box":
+                return new BoxQuestion(id, instructions, ReadAdditional(element, criteriaName: null));
+
             default:
                 return new RawQuestion(id, type, ReadRawBody(element));
         }
@@ -137,7 +140,7 @@ public sealed class QuestionJsonConverter : JsonConverter<Question>
         return body;
     }
 
-    private static Dictionary<string, JsonNode?>? ReadAdditional(JsonElement element, string criteriaName)
+    private static Dictionary<string, JsonNode?>? ReadAdditional(JsonElement element, string? criteriaName)
     {
         Dictionary<string, JsonNode?>? additional = null;
 
@@ -146,7 +149,7 @@ public sealed class QuestionJsonConverter : JsonConverter<Question>
             if (property.NameEquals("type") ||
                 property.NameEquals("id") ||
                 property.NameEquals("instructions") ||
-                property.NameEquals(criteriaName))
+                (criteriaName is not null && property.NameEquals(criteriaName)))
             {
                 continue;
             }

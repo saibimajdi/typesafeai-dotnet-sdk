@@ -82,7 +82,7 @@ internal static class TestClient
     /// </summary>
     public const string TriageResponse = """
         {
-          "model": "jev-1.13.0",
+          "model": "jev-1.14.0",
           "answers": {
             "is_urgent": { "type": "noul", "noul": 0.92 },
             "department": {
