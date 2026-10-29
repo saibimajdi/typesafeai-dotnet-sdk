@@ -12,10 +12,14 @@ Replace the old core package reference:
 
 ```bash
 dotnet remove package TypeSafe.Sdk
-dotnet add package TypeSafeAI.Sdk
+dotnet add package TypeSafeAI.Sdk --prerelease
 ```
 
-Or update the project file directly:
+Only prerelease versions are currently published, so `--prerelease` is required. Once a stable
+version is available, omit the flag to install the latest stable release.
+
+Or update the project file directly, replacing `VERSION` with a published package version
+(including its prerelease suffix):
 
 ```xml
 <PackageReference Include="TypeSafeAI.Sdk" Version="VERSION" />
@@ -25,7 +29,7 @@ For dependency injection, replace the old integration package in the same way:
 
 ```bash
 dotnet remove package TypeSafe.Sdk.DependencyInjection
-dotnet add package TypeSafeAI.Sdk.DependencyInjection
+dotnet add package TypeSafeAI.Sdk.DependencyInjection --prerelease
 ```
 
 ```xml

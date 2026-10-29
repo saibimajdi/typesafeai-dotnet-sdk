@@ -9,7 +9,8 @@ namespace TypeSafeAI;
 /// <para>
 /// Precedence is: an explicitly set property, then the matching environment variable, then the SDK
 /// default. Empty or whitespace-only environment values are ignored, so an empty
-/// <c>TYPESAFE_API_KEY</c> behaves as though it were unset.
+/// <c>TYPESAFE_API_KEY</c> behaves as though it were unset. Set
+/// <see cref="UseEnvironmentFallback"/> to <see langword="false"/> to skip the environment step.
 /// </para>
 /// <para>
 /// The environment variable names match the TypeSafe Python and JavaScript SDKs, so one set of
@@ -100,9 +101,27 @@ public sealed class TypeSafeClientOptions
     public TimeProvider? TimeProvider { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether unset options fall back to the <c>TYPESAFE_*</c>
+    /// environment variables.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to <see langword="true"/>. When <see langword="false"/>, the client reads no
+    /// environment variable: <see cref="ApiKey"/> must be set explicitly, or constructing the
+    /// client throws <see cref="TypeSafeConfigurationException"/>, and an unset
+    /// <see cref="BaseUrl"/> or <see cref="Model"/> uses the SDK default. Use this when a stray
+    /// variable on the host must not be able to change the key, the endpoint or the model.
+    /// </remarks>
+    public bool UseEnvironmentFallback { get; set; } = true;
+
+    /// <summary>
     /// Creates a copy of these options.
     /// </summary>
     /// <returns>A new instance with the same values.</returns>
+    /// <remarks>
+    /// <see cref="DefaultHeaders"/> is copied into a new dictionary, so changing the original
+    /// dictionary does not affect the copy. <see cref="Retry"/> is shared; a
+    /// <see cref="RetryPolicy"/> cannot be changed after construction.
+    /// </remarks>
     public TypeSafeClientOptions Clone() => new()
     {
         ApiKey = ApiKey,
@@ -110,10 +129,16 @@ public sealed class TypeSafeClientOptions
         Model = Model,
         Timeout = Timeout,
         Retry = Retry,
-        DefaultHeaders = DefaultHeaders,
+        DefaultHeaders = DefaultHeaders switch
+        {
+            null => null,
+            Dictionary<string, string> headers => new Dictionary<string, string>(headers, headers.Comparer),
+            var headers => new Dictionary<string, string>(headers, StringComparer.Ordinal),
+        },
         UserAgent = UserAgent,
         LoggerFactory = LoggerFactory,
         TimeProvider = TimeProvider,
+        UseEnvironmentFallback = UseEnvironmentFallback,
     };
 
     /// <summary>
@@ -121,11 +146,20 @@ public sealed class TypeSafeClientOptions
     /// </summary>
     /// <returns>The resolved API key.</returns>
     /// <exception cref="TypeSafeConfigurationException">
-    /// No API key was supplied and <c>TYPESAFE_API_KEY</c> is unset or blank.
+    /// No API key was supplied and, unless <see cref="UseEnvironmentFallback"/> is
+    /// <see langword="false"/>, <c>TYPESAFE_API_KEY</c> is unset or blank.
     /// </exception>
     internal string ResolveApiKey()
     {
-        var key = FirstNonBlank(ApiKey, Environment.GetEnvironmentVariable(TypeSafeDefaults.ApiKeyEnvironmentVariable));
+        var key = FirstNonBlank(ApiKey, ReadEnvironment(TypeSafeDefaults.ApiKeyEnvironmentVariable));
+
+        if (key is null && !UseEnvironmentFallback)
+        {
+            throw new TypeSafeConfigurationException(
+                "No TypeSafe API key was configured. Set the ApiKey option; the " +
+                $"{TypeSafeDefaults.ApiKeyEnvironmentVariable} environment variable is not read because " +
+                "UseEnvironmentFallback is false. Create a key at https://console.typesafe.ai/.");
+        }
 
         if (key is null)
         {
@@ -152,8 +186,8 @@ public sealed class TypeSafeClientOptions
         // TYPESAFE_BASE_URL is the documented name; TYPESAFE_ENDPOINT appears in the cookbooks and
         // is accepted so that either style of deployment configuration works.
         var configured = FirstNonBlank(
-            Environment.GetEnvironmentVariable(TypeSafeDefaults.BaseUrlEnvironmentVariable),
-            Environment.GetEnvironmentVariable(TypeSafeDefaults.LegacyEndpointEnvironmentVariable));
+            ReadEnvironment(TypeSafeDefaults.BaseUrlEnvironmentVariable),
+            ReadEnvironment(TypeSafeDefaults.LegacyEndpointEnvironmentVariable));
 
         return configured is null
             ? new Uri(TypeSafeDefaults.DefaultBaseUrl, UriKind.Absolute)
@@ -165,8 +199,11 @@ public sealed class TypeSafeClientOptions
     /// </summary>
     /// <returns>The resolved model name.</returns>
     internal string ResolveModel() =>
-        FirstNonBlank(Model, Environment.GetEnvironmentVariable(TypeSafeDefaults.DefaultModelEnvironmentVariable))
+        FirstNonBlank(Model, ReadEnvironment(TypeSafeDefaults.DefaultModelEnvironmentVariable))
         ?? TypeSafeDefaults.DefaultModel;
+
+    private string? ReadEnvironment(string name) =>
+        UseEnvironmentFallback ? Environment.GetEnvironmentVariable(name) : null;
 
     internal static bool IsValidTimeout(TimeSpan timeout) =>
         timeout > TimeSpan.Zero || timeout == System.Threading.Timeout.InfiniteTimeSpan;

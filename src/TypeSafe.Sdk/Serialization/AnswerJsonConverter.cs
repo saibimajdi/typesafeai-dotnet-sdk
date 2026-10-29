@@ -149,8 +149,22 @@ public sealed class AnswerJsonConverter : JsonConverter<Answer>
                 break;
         }
 
+        WriteAdditional(writer, value);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteAdditional(Utf8JsonWriter writer, Answer value)
+    {
         foreach (var (name, extra) in value.AdditionalProperties)
         {
+            // An unknown answer's extras mirror its raw body, which WriteElement has already written.
+            // Writing them again would duplicate every key, so the raw copy wins and only the rest
+            // are added.
+            if (value is UnknownAnswer written && written.Raw.TryGetProperty(name, out _))
+            {
+                continue;
+            }
+
             if (extra is null)
             {
                 writer.WriteNull(name);
@@ -161,8 +175,6 @@ public sealed class AnswerJsonConverter : JsonConverter<Answer>
                 extra.WriteTo(writer);
             }
         }
-
-        writer.WriteEndObject();
     }
 
     private static void WriteUnknownBody(Utf8JsonWriter writer, UnknownAnswer unknown)

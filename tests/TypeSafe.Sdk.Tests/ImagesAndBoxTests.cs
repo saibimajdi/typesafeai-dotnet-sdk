@@ -190,6 +190,28 @@ public sealed class ImagesAndBoxTests
     }
 
     [Fact]
+    public async Task SerializedRequestIncludesAssetsAndMatchesTheSentBody()
+    {
+        var (client, handler) = TestClient.Returning(BoxResponse);
+        var request = new SystemOneRequest
+        {
+            Model = "jev-latest",
+            State = "photo",
+            Questions = [new BoxQuestion("red_rectangle", "Locate the red rectangle.")],
+            Assets = new Dictionary<string, ImageAsset>
+            {
+                ["photo"] = ImageAsset.FromBase64(RedRectanglePng, ImageFormat.Png),
+            },
+        };
+
+        var measured = Serialization.TypeSafeJson.Serialize(request);
+        await client.SystemOneAsync(request);
+
+        Assert.Equal(handler.LastRequest.Body, measured);
+        Assert.Contains(RedRectanglePng, measured, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TextOnlyRequestsSendNoDangerZoneHeadersAndNoAssets()
     {
         var (client, handler) = TestClient.Returning(Fixtures.NoulResponse);

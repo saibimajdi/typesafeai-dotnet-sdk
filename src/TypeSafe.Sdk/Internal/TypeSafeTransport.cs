@@ -23,6 +23,13 @@ namespace TypeSafeAI;
 /// </remarks>
 internal sealed class TypeSafeTransport : IDisposable
 {
+    // The longest delay Task.Delay accepts: uint.MaxValue - 1 milliseconds, about 49.7 days.
+    private static readonly TimeSpan MaxDelay = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
+    // ponytail: fixed cap, far above any real System One or models response; make it an option if
+    // a legitimate response ever needs more.
+    private const int MaxResponseBytes = 16 * 1024 * 1024;
+
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
     private readonly TypeSafeClientOptions _options;
@@ -101,9 +108,16 @@ internal sealed class TypeSafeTransport : IDisposable
                 throw failure;
             }
 
+            // Task.Delay rejects anything above about 49.7 days, and an unbounded MaxRetryAfter lets a
+            // server ask for up to TimeSpan.MaxValue. The budget check is written as a subtraction so
+            // that it cannot overflow either.
             var delay = ComputeDelay(failure, attempt, policy, out var serverRequested);
+            if (delay > MaxDelay)
+            {
+                delay = MaxDelay;
+            }
 
-            if (policy.TotalBudget is { } budget && elapsed + delay >= budget)
+            if (policy.TotalBudget is { } budget && delay >= budget - elapsed)
             {
                 // The Python SDK stops before a retry whose delay would reach the budget and
                 // re-raises the last error, which keeps worst-case latency bounded.
@@ -173,8 +187,15 @@ internal sealed class TypeSafeTransport : IDisposable
 
             return new AttemptOutcome(null, timeout, Retryable: true);
         }
-        catch (HttpRequestException ex)
+        catch (TypeSafeResponseValidationException tooLarge)
         {
+            // An oversized body will be oversized again, so the built-in rules do not retry it.
+            return new AttemptOutcome(null, tooLarge, Retryable: false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            // Reading the body as a stream surfaces a connection dropped mid-body as an IOException,
+            // where buffering it used to wrap that in an HttpRequestException.
             var connection = new TypeSafeConnectionException(
                 $"The TypeSafe API could not be reached: {ex.Message}",
                 ex);
@@ -182,6 +203,55 @@ internal sealed class TypeSafeTransport : IDisposable
             return new AttemptOutcome(null, connection, Retryable: true);
         }
     }
+
+    // Read in chunks against a fixed cap, because HttpClient.MaxResponseContentBufferSize does not
+    // apply under ResponseHeadersRead and an endless body would otherwise grow until memory runs out.
+    private static async Task<string> ReadBodyAsync(
+        HttpResponseMessage response,
+        Func<TypeSafeResponseValidationException> tooLarge,
+        CancellationToken cancellationToken)
+    {
+        if (response.Content.Headers.ContentLength > MaxResponseBytes)
+        {
+            throw tooLarge();
+        }
+
+        using var buffer = new MemoryStream();
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using (stream.ConfigureAwait(false))
+        {
+            var chunk = new byte[81920];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                if (buffer.Length + read > MaxResponseBytes)
+                {
+                    throw tooLarge();
+                }
+
+                buffer.Write(chunk, 0, read);
+            }
+        }
+
+        return buffer.Length == 0
+            ? string.Empty
+            : Encoding.UTF8.GetString(buffer.GetBuffer(), 0, checked((int)buffer.Length));
+    }
+
+    private static TypeSafeResponseValidationException ResponseTooLarge(
+        HttpResponseMessage response,
+        string? requestId,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> headers,
+        HttpMethod method,
+        Uri uri) =>
+        new($"The TypeSafe API response body exceeded the {MaxResponseBytes / (1024 * 1024)} MiB limit, " +
+            "which usually means a proxy or a misconfigured BaseUrl is answering instead of the API.")
+        {
+            StatusCode = response.StatusCode,
+            RequestId = requestId,
+            Headers = headers,
+            Endpoint = $"{method.Method} {uri.AbsoluteUri}",
+        };
 
     private void AnnounceRetry(
         string operation,
@@ -249,10 +319,13 @@ internal sealed class TypeSafeTransport : IDisposable
 
         var headersSnapshot = Snapshot(response);
 
-        // The body is read as bytes so the response can be disposed immediately and the parsed
+        // The body is read into memory so the response can be disposed immediately and the parsed
         // payload stays valid for the caller.
-        var bytes = await response.Content.ReadAsByteArrayAsync(timeoutSource.Token).ConfigureAwait(false);
-        var text = bytes.Length == 0 ? string.Empty : Encoding.UTF8.GetString(bytes);
+        var text = await ReadBodyAsync(
+                response,
+                () => ResponseTooLarge(response, requestId, headersSnapshot, method, uri),
+                timeoutSource.Token)
+            .ConfigureAwait(false);
 
         if (_logger.IsEnabled(LogLevel.Debug))
         {

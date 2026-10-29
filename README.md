@@ -49,15 +49,18 @@ relative paths do not resolve.
 ## Install
 
 ```bash
-dotnet add package TypeSafeAI.Sdk
+dotnet add package TypeSafeAI.Sdk --prerelease
 ```
 
 ```bash
-dotnet add package TypeSafeAI.Sdk.DependencyInjection
+dotnet add package TypeSafeAI.Sdk.DependencyInjection --prerelease
 ```
 
 The DI package is optional and adds `IServiceCollection` registration on top of
 `IHttpClientFactory`.
+
+Only prerelease versions are currently published, so `--prerelease` is required. Once a stable
+version is available, omit the flag to install the latest stable release.
 
 ## 60-second quickstart
 
@@ -65,11 +68,11 @@ Get an API key from the [TypeSafe console](https://console.typesafe.ai/) and put
 `TYPESAFE_API_KEY` environment variable:
 
 ```bash
-export TYPESAFE_API_KEY="ts_..."
+export TYPESAFE_API_KEY="apikey_..."
 ```
 
 ```powershell
-$env:TYPESAFE_API_KEY = "ts_..."
+$env:TYPESAFE_API_KEY = "apikey_..."
 ```
 
 Then:

@@ -3,14 +3,17 @@
 ## 1. Install
 
 ```bash
-dotnet add package TypeSafeAI.Sdk
+dotnet add package TypeSafeAI.Sdk --prerelease
 ```
 
 The dependency injection integration is a separate, optional package:
 
 ```bash
-dotnet add package TypeSafeAI.Sdk.DependencyInjection
+dotnet add package TypeSafeAI.Sdk.DependencyInjection --prerelease
 ```
+
+Only prerelease versions are currently published, so `--prerelease` is required. Once a stable
+version is available, omit the flag to install the latest stable release.
 
 The package IDs and C# namespaces use the `TypeSafeAI` brand. The primary namespaces are
 `TypeSafeAI` and `TypeSafeAI.DependencyInjection`.
@@ -240,6 +243,10 @@ Add `TypeSafe` to configuration, from any provider, and the section is bound to
   }
 }
 ```
+
+To configure the client from this section only, set `"UseEnvironmentFallback": false` in it. The
+client then reads no `TYPESAFE_*` environment variable, so `ApiKey` must be set and an unset
+`BaseUrl` or `Model` uses the SDK default.
 
 `AddTypeSafeClient` returns the `IHttpClientBuilder`, so a handler can be added to the pipeline. The
 client is registered as a singleton on top of `IHttpClientFactory`, and the factory's own HTTP

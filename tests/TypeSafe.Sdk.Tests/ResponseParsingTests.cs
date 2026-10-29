@@ -218,6 +218,58 @@ public sealed class ResponseParsingTests
         Assert.Equal(12, result.Usage.TotalTokens);
     }
 
+    [Theory]
+    [InlineData("2147483648", "2", null, 2)]
+    [InlineData("-2147483649", "2", null, 2)]
+    [InlineData("1.5", "2", null, 2)]
+    [InlineData("1e10", "2", null, 2)]
+    [InlineData("2", "2147483648", 2, null)]
+    [InlineData("2", "1.5", 2, null)]
+    [InlineData("2147483648", "1.5", null, null)]
+    public async Task ATokenCountThatDoesNotFitAnIntDoesNotFailTheResponse(
+        string inputTokens, string outputTokens, int? expectedInput, int? expectedOutput)
+    {
+        var result = await ReadUsageAsync(inputTokens, outputTokens);
+
+        // Usage is optional metadata; a count the model cannot hold used to throw FormatException
+        // and discard the answers along with it.
+        Assert.Equal(0.4, result.Noul("a").Probability);
+        Assert.Equal(expectedInput, result.Usage!.InputTokens);
+        Assert.Equal(expectedOutput, result.Usage.OutputTokens);
+        Assert.Equal(inputTokens, result.RawJson.GetProperty("usage").GetProperty("input_tokens").GetRawText());
+        Assert.Equal(outputTokens, result.RawJson.GetProperty("usage").GetProperty("output_tokens").GetRawText());
+    }
+
+    [Theory]
+    [InlineData("2147483647", "0", int.MaxValue, 0, int.MaxValue)]
+    [InlineData("-2147483648", "0", int.MinValue, 0, int.MinValue)]
+    [InlineData("2147483647", "1", int.MaxValue, 1, null)]
+    public async Task ATokenCountAtTheIntLimitIsKeptAndAnOverflowingTotalIsUnknown(
+        string inputTokens, string outputTokens, int expectedInput, int expectedOutput, int? expectedTotal)
+    {
+        var result = await ReadUsageAsync(inputTokens, outputTokens);
+
+        // Representable counts are never rejected; a total that does not fit an int is unknown
+        // rather than wrapping around to a negative number.
+        Assert.Equal(expectedInput, result.Usage!.InputTokens);
+        Assert.Equal(expectedOutput, result.Usage.OutputTokens);
+        Assert.Equal(expectedTotal, result.Usage.TotalTokens);
+    }
+
+    private static Task<SystemOneResult> ReadUsageAsync(string inputTokens, string outputTokens)
+    {
+        var json = $$"""
+            {
+              "model": "jev-latest",
+              "answers": { "a": { "type": "noul", "noul": 0.4 } },
+              "usage": { "input_tokens": {{inputTokens}}, "output_tokens": {{outputTokens}} }
+            }
+            """;
+
+        var (client, _) = TestClient.Returning(json);
+        return client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task TheResolvedModelIsReportedNotTheAlias()
     {
@@ -297,6 +349,102 @@ public sealed class ResponseParsingTests
     }
 
     [Fact]
+    public void SerializingAResultKeepsUnmodelledTopLevelAndUsageFields()
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult("""
+            {
+              "model": "jev-latest",
+              "answers": { "is_urgent": { "type": "noul", "noul": 0.92 } },
+              "usage": { "input_tokens": 312, "output_tokens": 48, "cached_tokens": 7 },
+              "future_field": { "nested": [1, 2] }
+            }
+            """);
+
+        using var document = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(result));
+        var root = document.RootElement;
+
+        Assert.Equal("""{"nested":[1,2]}""", root.GetProperty("future_field").GetRawText());
+        Assert.Equal(7, root.GetProperty("usage").GetProperty("cached_tokens").GetInt32());
+        Assert.Equal(312, root.GetProperty("usage").GetProperty("input_tokens").GetInt32());
+        Assert.Equal(48, root.GetProperty("usage").GetProperty("output_tokens").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("input_tokens", "output_tokens")]
+    [InlineData("output_tokens", "input_tokens")]
+    public void SerializingAResultKeepsATokenCountThatDoesNotFitAnInt(string oversized, string normal)
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult($$"""
+            {
+              "model": "jev-latest",
+              "answers": {},
+              "usage": { "{{oversized}}": 1e20, "{{normal}}": 48 }
+            }
+            """);
+
+        var json = Serialization.TypeSafeJson.Serialize(result);
+        using var document = JsonDocument.Parse(json);
+        var usage = document.RootElement.GetProperty("usage");
+
+        // Read as unreported, but the value the server sent is not lost on the way to a cache.
+        Assert.Equal("1e20", usage.GetProperty(oversized).GetRawText());
+        Assert.Equal(48, usage.GetProperty(normal).GetInt32());
+        Assert.Equal(1, usage.EnumerateObject().Count(p => p.Name == normal));
+
+        var reread = Serialization.TypeSafeJson.DeserializeResult(json).Usage!;
+        Assert.Null(oversized == "input_tokens" ? reread.InputTokens : reread.OutputTokens);
+    }
+
+    [Fact]
+    public void SerializingAResultKeepsAUsageValueThatIsNotAnObject()
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult("""
+            { "model": "jev-latest", "answers": {}, "usage": "not reported" }
+            """);
+
+        Assert.Null(result.Usage);
+
+        using var document = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(result));
+
+        Assert.Equal("not reported", document.RootElement.GetProperty("usage").GetString());
+    }
+
+    [Fact]
+    public void SerializingAResultWritesEditsToAnAnswer()
+    {
+        var result = Serialization.TypeSafeJson.DeserializeResult("""
+            {
+              "model": "jev-latest",
+              "answers": { "is_urgent": { "type": "noul", "noul": 0.92, "extra": { "flag": false } } }
+            }
+            """);
+
+        result.Noul("is_urgent").AdditionalProperties["extra"]!["flag"] = true;
+
+        var restored = Serialization.TypeSafeJson.DeserializeResult(Serialization.TypeSafeJson.Serialize(result));
+
+        Assert.True(restored.Noul("is_urgent").AdditionalProperties["extra"]!["flag"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void SerializingAResultIsStableAcrossRoundTrips()
+    {
+        const string Json = """
+            {
+              "model": "jev-latest",
+              "answers": { "is_urgent": { "type": "noul", "noul": 0.92 } },
+              "usage": { "input_tokens": 312, "output_tokens": 48, "cached_tokens": 7 },
+              "future_field": 42
+            }
+            """;
+
+        var once = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeResult(Json));
+        var twice = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeResult(once));
+
+        Assert.Equal(once, twice);
+    }
+
+    [Fact]
     public async Task IndividualAnswersRoundTripThroughJson()
     {
         var (client, _) = TestClient.Returning(Fixtures.ScoreResponse);
@@ -310,6 +458,42 @@ public sealed class ResponseParsingTests
         Assert.Equal(answer.Id, restored.Id);
         Assert.Equal(answer.Score, restored.Score);
         Assert.Equal(answer.Confidence, restored.Confidence);
+    }
+
+    [Fact]
+    public void UnknownAnswersRoundTripWithEachPropertyWrittenOnce()
+    {
+        const string Json = """{"id":"future","type":"ranking","ranking":["a","b"],"confidence":0.9}""";
+
+        var once = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeAnswer(Json));
+        var twice = Serialization.TypeSafeJson.Serialize(Serialization.TypeSafeJson.DeserializeAnswer(once));
+
+        // Strict parsers reject duplicate keys, and a cache that round-trips repeatedly must not
+        // pile up copies.
+        Assert.Equal(once, twice);
+        using var document = JsonDocument.Parse(twice);
+        Assert.Equal(
+            ["id", "type", "ranking", "confidence"],
+            document.RootElement.EnumerateObject().Select(p => p.Name));
+    }
+
+    [Fact]
+    public void UnknownAnswersAlsoWriteExtrasThatAreNotInRaw()
+    {
+        using var raw = JsonDocument.Parse("""{"type":"ranking","ranking":["a"]}""");
+        var answer = new UnknownAnswer(
+            "future",
+            "ranking",
+            raw.RootElement.Clone(),
+            new Dictionary<string, JsonNode?> { ["ranking"] = new JsonArray("x"), ["note"] = "kept" });
+
+        using var document = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(answer));
+
+        // Raw is the body exactly as it arrived, so it wins a name clash; an extra it lacks is kept.
+        Assert.Equal(
+            ["id", "type", "ranking", "note"],
+            document.RootElement.EnumerateObject().Select(p => p.Name));
+        Assert.Equal("a", document.RootElement.GetProperty("ranking")[0].GetString());
     }
 
     [Fact]

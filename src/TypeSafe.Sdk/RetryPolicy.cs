@@ -94,6 +94,10 @@ public sealed class RetryPolicy
     /// Gets the ceiling applied to the computed backoff delay.
     /// <see cref="TimeSpan.Zero"/> disables backoff.
     /// </summary>
+    /// <remarks>
+    /// Any retry delay is capped at <see cref="uint.MaxValue"/> minus one milliseconds, about 49.7
+    /// days, the longest wait <see cref="Task.Delay(TimeSpan)"/> accepts.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public TimeSpan BackoffMax
     {
@@ -132,6 +136,7 @@ public sealed class RetryPolicy
     /// Gets the HTTP status codes that are retried. Defaults to <c>408</c>, <c>429</c>, and
     /// <c>500</c> through <c>599</c>.
     /// </summary>
+    /// <remarks>The policy keeps a copy, so changing the list afterwards has no effect.</remarks>
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public IReadOnlyList<int> HttpStatuses
     {
@@ -139,7 +144,7 @@ public sealed class RetryPolicy
         init
         {
             ArgumentNullException.ThrowIfNull(value);
-            _httpStatuses = value;
+            _httpStatuses = Array.AsReadOnly([.. value]);
         }
     }
 
@@ -161,6 +166,11 @@ public sealed class RetryPolicy
     /// Gets the longest server-requested delay the SDK will honour. A longer <c>Retry-After</c>
     /// is ignored and the computed backoff is used instead.
     /// </summary>
+    /// <remarks>
+    /// A server-requested delay that is honoured is still capped at about 49.7 days, the longest
+    /// wait <see cref="Task.Delay(TimeSpan)"/> accepts, so <see cref="TimeSpan.MaxValue"/> is a safe
+    /// way to always honour the server.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     public TimeSpan MaxRetryAfter
     {

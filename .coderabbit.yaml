@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration. Without this file CodeRabbit runs on its built-in defaults, which
+# know nothing about how this repository is built or what a pull request is expected to contain
+# (see CONTRIBUTING.md).
+language: en-US
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  collapse_walkthrough: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+  # Generated or machine-maintained files: reviewing them line by line is noise.
+  path_filters:
+    - "!**/packages.lock.json"
+    - "!**/bin/**"
+    - "!**/obj/**"
+    - "!site/**"
+
+  path_instructions:
+    - path: "src/**/*.cs"
+      instructions: |
+        Shipping SDK code targeting net8.0 and net10.0. The build treats warnings as errors and
+        requires XML documentation on every public member, so do not report missing docs or
+        compiler-level warnings; focus on behaviour, thread safety, cancellation, disposal,
+        and wire-format compatibility with the System One API.
+        Any change to the public API surface must be reflected in that project's
+        PublicAPI.Unshipped.txt, and user-visible changes need an entry under [Unreleased] in
+        CHANGELOG.md. Flag pull requests that change either without the other.
+        The core package has one runtime dependency (Microsoft.Extensions.Logging.Abstractions);
+        flag any new runtime dependency.
+    - path: "src/**/PublicAPI.*.txt"
+      instructions: |
+        Public API tracking files. Entries in PublicAPI.Shipped.txt must not be removed or
+        changed (that is a breaking change); new API belongs in PublicAPI.Unshipped.txt.
+    - path: "tests/**/*.cs"
+      instructions: |
+        xunit.v3 tests running on Microsoft.Testing.Platform for both net8.0 and net10.0.
+        Test methods are intentionally undocumented (CS1591 is suppressed); do not ask for XML
+        docs or docstrings here. Prefer assertions against independent expected values over
+        assertions that reuse the code under test.
+    - path: "docs/**/*.md"
+      instructions: |
+        User documentation published with MkDocs. Every C# sample must compile against the
+        current public API. Links to other guides are relative .md links; links to files outside
+        docs/ use full GitHub URLs.
+    - path: "Directory.Packages.props"
+      instructions: |
+        Central Package Management. A version change here must come with regenerated
+        packages.lock.json files, or the locked-mode restore in CI fails with NU1004.
+    - path: ".github/workflows/**"
+      instructions: |
+        Check that actions are pinned to full commit SHAs and that job permissions are minimal.
+
+  pre_merge_checks:
+    # The C# compiler already enforces XML docs on public members in src/ (warnings are errors),
+    # and tests suppress CS1591 on purpose, so CodeRabbit's docstring coverage check only produces
+    # false failures here.
+    docstrings:
+      mode: "off"
+
+chat:
+  auto_reply: true

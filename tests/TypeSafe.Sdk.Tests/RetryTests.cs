@@ -297,6 +297,115 @@ public sealed class RetryTests
         Assert.Equal(1, delays[0].TotalMilliseconds);
     }
 
+    [Theory]
+    [InlineData("retry-after-ms", "1e100")]
+    [InlineData("Retry-After", "1e100")]
+    public async Task AServerDelayTooLargeForATimeSpanFallsBackToBackoff(string header, string value)
+    {
+        var delays = new List<TimeSpan>();
+        var options = new TypeSafeClientOptions
+        {
+            Retry = new RetryPolicy
+            {
+                MaxRetries = 1,
+                BackoffInitial = TimeSpan.FromMilliseconds(1),
+                BackoffMax = TimeSpan.FromMilliseconds(2),
+                BackoffJitter = 0,
+                OnRetry = attempt => delays.Add(attempt.Delay),
+            },
+        };
+
+        var (client, handler) = TestClient.Create(
+            (_, _) =>
+            {
+                var response = StubHttpMessageHandler.Json("""{"detail":"slow down"}""", HttpStatusCode.TooManyRequests);
+                response.Headers.TryAddWithoutValidation(header, value);
+                return response;
+            },
+            options);
+
+        await Assert.ThrowsAsync<TypeSafeRateLimitException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], TestContext.Current.CancellationToken));
+
+        // The saturated server delay exceeds MaxRetryAfter, so the computed backoff is used.
+        Assert.Equal(2, handler.Attempts);
+        Assert.Equal(1, delays[0].TotalMilliseconds);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ADelayAboveTheTaskDelayLimitIsCapped(bool serverRequested)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var delays = new List<TimeSpan>();
+        var hundredDays = TimeSpan.FromDays(100);
+        var options = new TypeSafeClientOptions
+        {
+            Retry = new RetryPolicy
+            {
+                MaxRetries = 1,
+                MaxRetryAfter = hundredDays,
+                BackoffInitial = hundredDays,
+                BackoffMax = hundredDays,
+                BackoffJitter = 0,
+                TotalBudget = null,
+                OnRetry = attempt =>
+                {
+                    delays.Add(attempt.Delay);
+
+                    // The capped delay is still about 49.7 days; stop the test from waiting it out.
+                    cancellation.Cancel();
+                },
+            },
+        };
+
+        var (client, _) = TestClient.Create(
+            (_, _) =>
+            {
+                var response = StubHttpMessageHandler.Json("""{"detail":"slow down"}""", HttpStatusCode.TooManyRequests);
+                if (serverRequested)
+                {
+                    response.Headers.TryAddWithoutValidation("Retry-After", "8640000");
+                }
+
+                return response;
+            },
+            options);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], cancellation.Token));
+
+        Assert.Equal(TimeSpan.FromMilliseconds(uint.MaxValue - 1), Assert.Single(delays));
+    }
+
+    [Fact]
+    public async Task AnUnboundedServerDelayRespectsTheTotalBudget()
+    {
+        var options = new TypeSafeClientOptions
+        {
+            Retry = new RetryPolicy
+            {
+                MaxRetries = 1,
+                MaxRetryAfter = TimeSpan.MaxValue,
+            },
+        };
+
+        var (client, handler) = TestClient.Create(
+            (_, _) =>
+            {
+                var response = StubHttpMessageHandler.Json("""{"detail":"slow down"}""", HttpStatusCode.TooManyRequests);
+                response.Headers.TryAddWithoutValidation("retry-after-ms", "1e100");
+                return response;
+            },
+            options);
+
+        // The saturated delay is longer than the budget, so the call stops instead of retrying.
+        await Assert.ThrowsAsync<TypeSafeRateLimitException>(
+            () => client.SystemOneAsync("text", [new NoulQuestion("a", "q?")], TestContext.Current.CancellationToken));
+        Assert.Equal(1, handler.Attempts);
+    }
+
     [Fact]
     public async Task TheTotalBudgetStopsFurtherRetries()
     {
@@ -452,6 +561,17 @@ public sealed class RetryTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new RetryPolicy { MaxRetryAfter = TimeSpan.FromSeconds(-1) });
         Assert.Throws<ArgumentOutOfRangeException>(() => new RetryPolicy { TotalBudget = TimeSpan.FromSeconds(-1) });
         Assert.Throws<ArgumentNullException>(() => new RetryPolicy { HttpStatuses = null! });
+    }
+
+    [Fact]
+    public void ChangingTheStatusListAfterConstructionDoesNotAffectThePolicy()
+    {
+        var statuses = new List<int> { 503 };
+        var policy = new RetryPolicy { HttpStatuses = statuses };
+
+        statuses.Add(400);
+
+        Assert.Equal([503], policy.HttpStatuses);
     }
 
     [Fact]

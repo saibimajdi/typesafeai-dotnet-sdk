@@ -1,6 +1,6 @@
-using System.Text.Json.Nodes;
-
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace TypeSafeAI.Tests;
 
@@ -336,6 +336,207 @@ public sealed class WireFormatTests
 
         Assert.True(sent.TryGetProperty("OrderId", out _), "The caller's property name was renamed.");
         Assert.Equal("A-104", sent.GetProperty("OrderId").GetString());
+    }
+
+    [Fact]
+    public async Task SerializedRequestIsTheBodyTheClientSends()
+    {
+        var request = new SystemOneRequest
+        {
+            State = "Mijn uitbetalingen mislukken al drie dagen — één na één.",
+            Questions = TestClient.TriageQuestions(),
+            Options = new TypeSafeRequestOptions
+            {
+                Model = "jev-2026-01",
+                AdditionalBodyProperties = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+                {
+                    ["future_field"] = JsonValue.Create(true),
+                },
+            },
+        };
+
+        // Measure first, then send: the order a caller uses, and it proves measuring leaves the
+        // request intact.
+        var measured = Serialization.TypeSafeJson.Serialize(request);
+
+        var (client, handler) = TestClient.Returning(Fixtures.NoulResponse);
+        await client.SystemOneAsync(request);
+
+        // Exact, not JSON-equivalent: a size measurement is only useful if the bytes are the same.
+        Assert.Equal(handler.LastRequest.Body, measured);
+
+        // Parity alone would also hold if both paths shared the same bug, so the measured body is
+        // checked against the documented shape as well.
+        AssertJsonEquivalent(
+            """
+            {
+              "state": "Mijn uitbetalingen mislukken al drie dagen — één na één.",
+              "model": "jev-2026-01",
+              "questions": {
+                "is_urgent": { "type": "noul", "instructions": "Does this convey urgency?" },
+                "department": {
+                  "type": "choice",
+                  "instructions": "Which team should handle this?",
+                  "criteria": { "billing": null, "technical": null, "sales": null }
+                },
+                "frustration": {
+                  "type": "score",
+                  "instructions": "How frustrated is the customer?",
+                  "criteria": ["Calm", "Frustrated", "Very angry"]
+                }
+              },
+              "future_field": true
+            }
+            """,
+            measured);
+    }
+
+    [Fact]
+    public async Task SerializedRequestKeepsTheClientsCollisionRules()
+    {
+        // Additional properties named like the SDK's own fields replace them, even an explicit Model.
+        var request = new SystemOneRequest
+        {
+            State = "ignored",
+            Questions = [new NoulQuestion("a", "question?")],
+            Model = "ignored-too",
+            AdditionalProperties = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+            {
+                ["state"] = JsonValue.Create("replaced"),
+                ["model"] = JsonValue.Create("replaced-model"),
+            },
+        };
+
+        var measured = Serialization.TypeSafeJson.Serialize(request);
+
+        var (client, handler) = TestClient.Returning(Fixtures.NoulResponse);
+        await client.SystemOneAsync(request);
+
+        Assert.Equal(handler.LastRequest.Body, measured);
+
+        using var body = JsonDocument.Parse(measured);
+        Assert.Equal("replaced", body.RootElement.GetProperty("state").GetString());
+        Assert.Equal("replaced-model", body.RootElement.GetProperty("model").GetString());
+    }
+
+    [Theory]
+    [InlineData(null, null, TypeSafeDefaults.DefaultModel)]
+    [InlineData(null, "from-options", "from-options")]
+    [InlineData("from-request", "from-options", "from-request")]
+    [InlineData("from-request", null, "from-request")]
+    public void SerializedRequestModelFollowsTheClientPrecedence(string? model, string? optionsModel, string expected)
+    {
+        var request = new SystemOneRequest
+        {
+            State = "text",
+            Questions = [new NoulQuestion("a", "question?")],
+            Model = model,
+            Options = optionsModel is null ? null : new TypeSafeRequestOptions { Model = optionsModel },
+        };
+
+        using var body = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(request));
+
+        Assert.Equal(expected, body.RootElement.GetProperty("model").GetString());
+    }
+
+    [Fact]
+    public void SerializedRequestAdditionalPropertiesReplaceTheOptionsSet()
+    {
+        var request = new SystemOneRequest
+        {
+            State = "text",
+            Questions = [new NoulQuestion("a", "question?")],
+            AdditionalProperties = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+            {
+                ["from_request"] = JsonValue.Create(1),
+            },
+            Options = new TypeSafeRequestOptions
+            {
+                AdditionalBodyProperties = new Dictionary<string, JsonNode?>(StringComparer.Ordinal)
+                {
+                    ["from_options"] = JsonValue.Create(2),
+                },
+            },
+        };
+
+        using var body = JsonDocument.Parse(Serialization.TypeSafeJson.Serialize(request));
+
+        // The client replaces the options' set with the request's rather than merging the two.
+        Assert.True(body.RootElement.TryGetProperty("from_request", out _));
+        Assert.False(body.RootElement.TryGetProperty("from_options", out _));
+    }
+
+    [Fact]
+    public void SerializedRequestEscapesNonAsciiText()
+    {
+        // Dutch text: every accented letter is escaped to six ASCII characters on the wire. A plain
+        // string state therefore serializes to pure ASCII, where Length and the byte count agree.
+        const string Text = "Café, één, über, naïef, façade.";
+        var request = new SystemOneRequest
+        {
+            State = Text,
+            Questions = [new NoulQuestion("a", "question?")],
+        };
+
+        var json = Serialization.TypeSafeJson.Serialize(request);
+
+        Assert.All(json, c => Assert.True(c < 128, $"Non-ASCII character '{c}' in the serialized request."));
+        Assert.Equal(Encoding.UTF8.GetByteCount(json), json.Length);
+        Assert.Contains("u00E9", json, StringComparison.Ordinal);
+
+        // The trap this method exists to avoid: counting characters undercounts what the SDK sends.
+        // The same request with an ASCII state of the same length is 30 bytes shorter: six accented
+        // letters, each one character in the text and six on the wire.
+        var ascii = Serialization.TypeSafeJson.Serialize(new SystemOneRequest
+        {
+            State = new string('x', Text.Length),
+            Questions = request.Questions,
+        });
+        Assert.Equal(ascii.Length + 6 * 5, json.Length);
+    }
+
+    [Fact]
+    public void SerializeRequestRejectsWhatTheClientRejects()
+    {
+        Assert.Throws<ArgumentNullException>(() => Serialization.TypeSafeJson.Serialize((SystemOneRequest)null!));
+
+        var nullState = new SystemOneRequest { State = null, Questions = [new NoulQuestion("a", "q?")] };
+        Assert.Throws<ArgumentException>(() => Serialization.TypeSafeJson.Serialize(nullState));
+
+        var noQuestions = new SystemOneRequest { State = "text", Questions = [] };
+        Assert.Throws<ArgumentException>(() => Serialization.TypeSafeJson.Serialize(noQuestions));
+
+        var nullQuestions = new SystemOneRequest { State = "text", Questions = null! };
+        Assert.Throws<ArgumentNullException>(() => Serialization.TypeSafeJson.Serialize(nullQuestions));
+
+        var nullQuestion = new SystemOneRequest { State = "text", Questions = [null!] };
+        Assert.Throws<ArgumentNullException>(() => Serialization.TypeSafeJson.Serialize(nullQuestion));
+
+        var duplicateIds = new SystemOneRequest
+        {
+            State = "text",
+            Questions = [new NoulQuestion("a", "q?"), new NoulQuestion("a", "again?")],
+        };
+        Assert.Throws<ArgumentException>(() => Serialization.TypeSafeJson.Serialize(duplicateIds));
+
+        var removedField = new SystemOneRequest
+        {
+            State = "text",
+            Questions = [new NoulQuestion("a", "q?")],
+            AdditionalProperties = new Dictionary<string, JsonNode?>(StringComparer.Ordinal) { ["document"] = null },
+        };
+        Assert.Throws<ArgumentException>(() => Serialization.TypeSafeJson.Serialize(removedField));
+
+        var removedFieldViaOptions = new SystemOneRequest
+        {
+            State = "text",
+            Questions = [new NoulQuestion("a", "q?")],
+            Options = new TypeSafeRequestOptions
+            {
+                AdditionalBodyProperties = new Dictionary<string, JsonNode?>(StringComparer.Ordinal) { ["document"] = null },
+            },
+        };
+        Assert.Throws<ArgumentException>(() => Serialization.TypeSafeJson.Serialize(removedFieldViaOptions));
     }
 
     private static void AssertJsonEquivalent(string expected, string actual)

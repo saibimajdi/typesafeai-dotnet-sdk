@@ -9,11 +9,18 @@ It is independent of, and not affiliated with or endorsed by, TypeSafe AI.
 ## Install
 
 ```bash
-dotnet add package TypeSafeAI.Sdk
+dotnet add package TypeSafeAI.Sdk --prerelease
 ```
 
 For `IHttpClientFactory` and `IServiceCollection` integration, also install
-`TypeSafeAI.Sdk.DependencyInjection`.
+`TypeSafeAI.Sdk.DependencyInjection`:
+
+```bash
+dotnet add package TypeSafeAI.Sdk.DependencyInjection --prerelease
+```
+
+Only prerelease versions are currently published, so `--prerelease` is required. Once a stable
+version is available, omit the flag to install the latest stable release.
 
 **[Start with the quickstart →](quickstart.md)** — create your first request, configure the
 client, and work with typed answers.

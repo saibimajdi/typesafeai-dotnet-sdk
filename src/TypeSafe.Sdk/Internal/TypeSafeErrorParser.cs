@@ -128,7 +128,9 @@ internal static class TypeSafeErrorParser
             double.TryParse(milliseconds, NumberStyles.Float, CultureInfo.InvariantCulture, out var ms) &&
             ms >= 0)
         {
-            return TimeSpan.FromMilliseconds(ms);
+            // A value beyond TimeSpan's range, infinity included, saturates rather than throwing,
+            // so the caller still gets the rate-limit exception and MaxRetryAfter still applies.
+            return ms >= TimeSpan.MaxValue.TotalMilliseconds ? TimeSpan.MaxValue : TimeSpan.FromMilliseconds(ms);
         }
 
         if (!TryGetHeader(headers, "Retry-After", out var value) || string.IsNullOrWhiteSpace(value))
@@ -138,7 +140,7 @@ internal static class TypeSafeErrorParser
 
         if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) && seconds >= 0)
         {
-            return TimeSpan.FromSeconds(seconds);
+            return seconds >= TimeSpan.MaxValue.TotalSeconds ? TimeSpan.MaxValue : TimeSpan.FromSeconds(seconds);
         }
 
         if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var when))

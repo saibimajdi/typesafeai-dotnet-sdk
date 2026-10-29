@@ -12,6 +12,44 @@ version is `0.x`, a breaking change increments the minor version, and the public
 tracked per project in `PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt` so that no change to
 it can happen by accident.
 
+### Fixed
+
+- Installation commands now include `--prerelease` for both NuGet packages so they work while
+  only prerelease versions are published.
+- A `retry-after-ms` or `Retry-After` value too large for a `TimeSpan`, such as `1e100` or
+  `Infinity`, no longer escapes as an `OverflowException`. It saturates to `TimeSpan.MaxValue`,
+  so the `TypeSafeRateLimitException` is still thrown, and retries fall back to the computed
+  backoff when the value exceeds `MaxRetryAfter`.
+- A `usage` token count that does not fit an `int`, such as `2147483648` or `1.5`, no longer fails
+  the whole response with a `FormatException`. The count reads as `null` and the original value
+  stays available in `RawJson`. `Usage.TotalTokens` likewise reads as `null` when the sum of the
+  two counts does not fit an `int`, instead of wrapping around to a negative number.
+- A retry delay above about 49.7 days, the longest `Task.Delay` accepts, is now capped there. Before,
+  a large `MaxRetryAfter` or `BackoffMax` with no `TotalBudget` made `Task.Delay` throw
+  `ArgumentOutOfRangeException`, and `MaxRetryAfter = TimeSpan.MaxValue` let a saturated
+  `Retry-After` overflow the budget check with an `OverflowException` instead of stopping with the
+  `TypeSafeRateLimitException`.
+- Serializing an `UnknownAnswer` no longer writes each of its fields twice. The fields came out
+  of both `Raw` and `AdditionalProperties`, producing duplicate keys that strict JSON parsers
+  reject and that multiplied on every cache round trip. `Raw` wins a name clash; an additional
+  property that `Raw` does not have is still written.
+- `new TypeSafeClient(apiKey, options)` no longer writes `apiKey` into the caller's `options`.
+  Before, a later client built from the same options object authenticated with that key. The
+  client now keeps a copy of the options it is given, so changing the object after construction
+  no longer affects a client that already exists. That includes editing the `DefaultHeaders`
+  dictionary in place, and `RetryPolicy` now keeps its own copy of `HttpStatuses`.
+- Serializing a `SystemOneResult` no longer drops the response fields the SDK does not model, so a
+  cached result is complete when it is read back, as the forward-compatibility guide promises.
+  Unknown top-level fields, unknown `usage` fields, a `usage` value that is not an object, and a
+  token count that read as `null` because it did not fit an `int` are all copied from `RawJson`.
+  The model, answers and the other token counts are still written from the typed properties, so
+  edits to an answer's `AdditionalProperties` are kept.
+- A response body is now limited to 16 MiB. Before, an endless or huge body, from a broken proxy or
+  a wrong `BaseUrl`, was buffered until it hit .NET's 2 GB limit, and the resulting connection
+  error was retried, so one call could allocate several gigabytes. An oversized body now fails
+  with a `TypeSafeResponseValidationException`, which is not retried; a `Content-Length` over the
+  limit fails before the body is read.
+
 ### Changed
 
 - `TypeSafeDefaults.ApproximateRequestTokenBudget` is now `64_000`, matching the documented
@@ -43,6 +81,17 @@ it can happen by accident.
 - `TypeSafeDefaults.ImagesHeader`, `LongContextHeader`, `ApproximateQuestionTokenBudget`, and
   `ApproximateLongContextTokenBudget`.
 
+- `TypeSafeClientOptions.UseEnvironmentFallback`, `true` by default. Set it to `false` and the
+  client reads no `TYPESAFE_*` environment variable, so a stray variable on the host cannot change
+  the API key, the endpoint or the model: a missing `ApiKey` throws
+  `TypeSafeConfigurationException`, and an unset `BaseUrl` or `Model` uses the SDK default. It
+  binds from `TypeSafe:UseEnvironmentFallback` in configuration.
+- `TypeSafeJson.Serialize(SystemOneRequest)` returns the body the client would send for a request,
+  from the same writer, so a caller can measure a request before sending it. Measure it with
+  `Encoding.UTF8.GetByteCount`: the writer escapes each non-ASCII character to a six-character
+  sequence, so counting the characters of the state undercounts what goes on the wire. Without a
+  client there is no configured default model: a request that names no model is written with
+  `TypeSafeDefaults.DefaultModel`.
 - A searchable SDK documentation site with light/dark themes and automated GitHub Pages
   deployment, built from the existing Markdown guides and validated on pull requests.
 

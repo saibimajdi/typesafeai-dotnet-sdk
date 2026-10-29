@@ -155,7 +155,7 @@ Everything the SDK raises derives from `TypeSafeException`.
 | `TypeSafeUnprocessableEntityException` | HTTP `422` — the request was well-formed but the API rejected its contents. | No |
 | `TypeSafeRateLimitException` | HTTP `429`, after the retries were exhausted. Adds `RetryAfter`, a `TimeSpan?`. | Yes |
 | `TypeSafeServerException` | HTTP `5xx`, after the retries were exhausted. | Yes |
-| `TypeSafeResponseValidationException` | A **successful** response whose body was missing or structurally invalid. Usually a proxy, a captive portal, or an incompatible API version rather than a transient fault. Adds `FieldPath`. Derives from `TypeSafeApiException`. | No |
+| `TypeSafeResponseValidationException` | A **successful** response whose body was missing or structurally invalid, or a response of any status whose body exceeded 16 MiB. Usually a proxy, a captive portal, a wrong `BaseUrl`, or an incompatible API version rather than a transient fault. Adds `FieldPath`. Derives from `TypeSafeApiException`. | No |
 | `TypeSafeApiException` itself | Any other unsuccessful status code. | No |
 
 The hierarchy is `TypeSafeException` → `TypeSafeApiException` → the concrete HTTP-status types, so
@@ -164,6 +164,12 @@ The hierarchy is `TypeSafeException` → `TypeSafeApiException` → the concrete
 The concrete type is chosen from the **status code alone**. The body's `detail.error_type` string is
 surfaced through `ErrorType` but never used to select an exception type, because it is not part of
 the documented contract and new values can appear at any time.
+
+The one exception to choosing by status is the size of the body. A response body larger than 16 MiB
+is rejected while it is being read, before its status is classified, so even an oversized `503`
+raises `TypeSafeResponseValidationException`, with `StatusCode` still set. It is not retried. Real
+API responses are a few kilobytes, so the limit only trips on something other than the API
+answering, such as an endless body from a broken proxy.
 
 An empty or unrecognised answer, by contrast, is not an error: unmodelled fields are preserved and
 an unrecognised answer kind becomes `UnknownAnswer`. See

@@ -69,9 +69,18 @@ public sealed class SystemOneResultJsonConverter : JsonConverter<SystemOneResult
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The model, answers and token counts are written from the typed properties, so edits to an
+    /// answer's <see cref="Answer.AdditionalProperties"/> are kept. Every other field of
+    /// <see cref="SystemOneResult.RawJson"/>, at the top level and inside <c>usage</c>, is copied
+    /// verbatim, as is a token count that was read as <see langword="null"/> because it did not fit
+    /// an <see cref="int"/>.
+    /// </remarks>
     public override void Write(Utf8JsonWriter writer, SystemOneResult value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(value);
+
+        var raw = value.RawJson;
 
         writer.WriteStartObject();
         writer.WriteString("model", value.Model);
@@ -87,10 +96,30 @@ public sealed class SystemOneResultJsonConverter : JsonConverter<SystemOneResult
 
         if (value.Usage is { } usage)
         {
-            WriteUsage(writer, usage);
+            WriteUsage(writer, usage, raw);
         }
 
+        // A usage value that did not read as an object is unmodelled, so it is copied with the rest.
+        WriteUnmodelled(writer, raw, name =>
+            name is "model" or "answers" || (name is "usage" && value.Usage is not null));
+
         writer.WriteEndObject();
+    }
+
+    private static void WriteUnmodelled(Utf8JsonWriter writer, JsonElement raw, Func<string, bool> written)
+    {
+        if (raw.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        foreach (var property in raw.EnumerateObject())
+        {
+            if (!written(property.Name))
+            {
+                property.WriteTo(writer);
+            }
+        }
     }
 
     private static Usage? ReadUsage(JsonElement element)
@@ -105,12 +134,16 @@ public sealed class SystemOneResultJsonConverter : JsonConverter<SystemOneResult
             ReadNullableInt(usage, "output_tokens"));
     }
 
+    // A count that does not fit an int, fractional or out of range, reads as unreported rather than
+    // failing the response; the original value stays available in RawJson.
     private static int? ReadNullableInt(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Number
-            ? property.GetInt32()
+        element.TryGetProperty(name, out var property) &&
+        property.ValueKind == JsonValueKind.Number &&
+        property.TryGetInt32(out var value)
+            ? value
             : null;
 
-    private static void WriteUsage(Utf8JsonWriter writer, Usage usage)
+    private static void WriteUsage(Utf8JsonWriter writer, Usage usage, JsonElement raw)
     {
         writer.WriteStartObject("usage");
 
@@ -122,6 +155,13 @@ public sealed class SystemOneResultJsonConverter : JsonConverter<SystemOneResult
         if (usage.OutputTokens is { } output)
         {
             writer.WriteNumber("output_tokens", output);
+        }
+
+        if (raw.ValueKind == JsonValueKind.Object && raw.TryGetProperty("usage", out var rawUsage))
+        {
+            WriteUnmodelled(writer, rawUsage, name =>
+                (name is "input_tokens" && usage.InputTokens is not null) ||
+                (name is "output_tokens" && usage.OutputTokens is not null));
         }
 
         writer.WriteEndObject();

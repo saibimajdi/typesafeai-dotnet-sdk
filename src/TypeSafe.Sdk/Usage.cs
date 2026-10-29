@@ -7,17 +7,19 @@ namespace TypeSafeAI;
 /// </summary>
 /// <param name="InputTokens">
 /// The number of input tokens the request consumed, or <see langword="null"/> when the API did not
-/// report it.
+/// report it or reported a value that does not fit an <see cref="int"/>.
 /// </param>
 /// <param name="OutputTokens">
 /// The number of output tokens the request produced, or <see langword="null"/> when the API did not
-/// report it.
+/// report it or reported a value that does not fit an <see cref="int"/>.
 /// </param>
 /// <remarks>
 /// <para>
 /// Both counts are nullable because the API does not always report them, and a missing count is
-/// not a count of zero. Treat <see langword="null"/> as "unknown" and decide for yourself whether
-/// to substitute <c>0</c> when accumulating totals.
+/// not a count of zero. A reported value that cannot be represented, fractional or out of range,
+/// is also <see langword="null"/>; the original value stays available in
+/// <see cref="SystemOneResult.RawJson"/>. Treat <see langword="null"/> as "unknown" and decide for
+/// yourself whether to substitute <c>0</c> when accumulating totals.
 /// </para>
 /// <para>
 /// The request's <c>state</c> and its <c>questions</c> share one token budget of roughly
@@ -31,8 +33,19 @@ public sealed record Usage(
 {
     /// <summary>
     /// Gets the total tokens reported for the request, or <see langword="null"/> when neither count
-    /// was reported.
+    /// was reported or their sum does not fit an <see cref="int"/>.
     /// </summary>
-    public int? TotalTokens =>
-        InputTokens is null && OutputTokens is null ? null : (InputTokens ?? 0) + (OutputTokens ?? 0);
+    public int? TotalTokens
+    {
+        get
+        {
+            if (InputTokens is null && OutputTokens is null)
+            {
+                return null;
+            }
+
+            long total = (long)(InputTokens ?? 0) + (OutputTokens ?? 0);
+            return total is >= int.MinValue and <= int.MaxValue ? (int)total : null;
+        }
+    }
 }
