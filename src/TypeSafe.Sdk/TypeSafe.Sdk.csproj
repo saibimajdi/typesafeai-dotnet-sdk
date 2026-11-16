@@ -15,6 +15,7 @@
       Microsoft.Extensions.Logging.Abstractions is the .NET-idiomatic way to expose it.
       Retry is implemented in-library rather than delegated to Polly; see docs/design.md.
     -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
